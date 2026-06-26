@@ -1,0 +1,17 @@
+{
+  "name": "勇者書架",
+  "short_name": "勇者書架",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#eef5f4",
+  "theme_color": "#0d3b42",
+  "description": "《勇者派送中》手機小說閱讀 App 原型",
+  "icons": [
+    {
+      "src": "assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
