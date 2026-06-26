@@ -34,6 +34,9 @@ const state = {
     fontSize: 18,
     theme: "paper",
     audioRate: 1,
+    audioPitch: 1,
+    audioStyle: "emotive",
+    audioVoiceURI: "",
     audioAutoNext: true,
     sleepMinutes: 0
   },
@@ -73,6 +76,9 @@ if (audioSupported()) {
   cachedVoices = window.speechSynthesis.getVoices();
   window.speechSynthesis.addEventListener("voiceschanged", () => {
     cachedVoices = window.speechSynthesis.getVoices();
+    if (state.book) {
+      render();
+    }
   });
   window.addEventListener("pagehide", () => stopAudio(false));
 }
@@ -115,6 +121,9 @@ function loadLocalState() {
       fontSize: clamp(Number(storedReader.fontSize) || 18, 15, 24),
       theme: storedReader.theme || "paper",
       audioRate: clamp(Number(storedReader.audioRate) || 1, 0.7, 1.4),
+      audioPitch: clamp(Number(storedReader.audioPitch) || 1, 0.8, 1.2),
+      audioStyle: storedReader.audioStyle === "plain" ? "plain" : "emotive",
+      audioVoiceURI: storedReader.audioVoiceURI || "",
       audioAutoNext: storedReader.audioAutoNext !== false,
       sleepMinutes: [0, 15, 30, 60].includes(Number(storedReader.sleepMinutes)) ? Number(storedReader.sleepMinutes) : 0
     };
@@ -461,6 +470,25 @@ function profileView() {
         </div>
       </div>
       <div class="setting-row">
+        <span>朗讀</span>
+        <div class="segmented">
+          ${audioStyleButton("plain", "標準")}
+          ${audioStyleButton("emotive", "感情")}
+        </div>
+      </div>
+      <div class="setting-row">
+        <span>聲音</span>
+        ${voiceSelect()}
+      </div>
+      <div class="setting-row">
+        <span>音高</span>
+        <div class="speed-control">
+          <button type="button" data-action="audio-pitch-minus">低</button>
+          <strong>${state.reader.audioPitch.toFixed(1)}</strong>
+          <button type="button" data-action="audio-pitch-plus">高</button>
+        </div>
+      </div>
+      <div class="setting-row">
         <span>連播</span>
         <div class="segmented">
           ${autoNextButton(true, "開")}
@@ -544,7 +572,7 @@ function audioDock(chapter) {
       </button>
       <div class="audio-meta">
         <strong>${status}</strong>
-        <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${state.reader.audioRate.toFixed(1)}x · ${sleepStatusLabel()}</span>
+        <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${escapeHtml(audioModeLabel())} · ${state.reader.audioRate.toFixed(1)}x · ${sleepStatusLabel()}</span>
       </div>
       <button class="audio-stop" type="button" data-action="audio-stop" ${active ? "" : "disabled"} aria-label="停止朗讀">${icons.stop}</button>
     </div>
@@ -575,6 +603,25 @@ function settingsSheet() {
           <button type="button" data-action="audio-rate-minus">慢</button>
           <strong>${state.reader.audioRate.toFixed(1)}x</strong>
           <button type="button" data-action="audio-rate-plus">快</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span>朗讀</span>
+        <div class="segmented">
+          ${audioStyleButton("plain", "標準")}
+          ${audioStyleButton("emotive", "感情")}
+        </div>
+      </div>
+      <div class="setting-row">
+        <span>聲音</span>
+        ${voiceSelect()}
+      </div>
+      <div class="setting-row">
+        <span>音高</span>
+        <div class="speed-control">
+          <button type="button" data-action="audio-pitch-minus">低</button>
+          <strong>${state.reader.audioPitch.toFixed(1)}</strong>
+          <button type="button" data-action="audio-pitch-plus">高</button>
         </div>
       </div>
       <div class="setting-row">
@@ -652,6 +699,40 @@ function themeButton(theme, label) {
   return `<button type="button" class="${state.reader.theme === theme ? "active" : ""}" data-theme="${theme}">${label}</button>`;
 }
 
+function audioStyleButton(style, label) {
+  return `<button type="button" class="${state.reader.audioStyle === style ? "active" : ""}" data-audio-style="${style}">${label}</button>`;
+}
+
+function voiceSelect() {
+  const voices = voiceOptions();
+  return `
+    <select class="voice-select" data-input="voice-select" aria-label="選擇朗讀聲音">
+      <option value="">自動選擇中文聲音</option>
+      ${voices.map((voice) => `
+        <option value="${escapeAttr(voice.voiceURI)}" ${state.reader.audioVoiceURI === voice.voiceURI ? "selected" : ""}>
+          ${escapeHtml(voice.name)} · ${escapeHtml(voice.lang)}
+        </option>
+      `).join("")}
+    </select>
+  `;
+}
+
+function voiceOptions() {
+  if (!audioSupported()) return [];
+  cachedVoices = window.speechSynthesis.getVoices();
+  return cachedVoices
+    .filter((voice) => /^zh/i.test(voice.lang) || /Chinese|Cantonese|Mandarin|中文|粵|台|臺|香港|普通話/i.test(voice.name))
+    .sort((a, b) => voiceRank(a) - voiceRank(b) || a.name.localeCompare(b.name));
+}
+
+function voiceRank(voice) {
+  if (/zh-(HK|MO)/i.test(voice.lang) || /Cantonese|粵|香港/i.test(voice.name)) return 0;
+  if (/zh-TW/i.test(voice.lang) || /台|臺/i.test(voice.name)) return 1;
+  if (/zh-CN/i.test(voice.lang) || /Mandarin|普通話/i.test(voice.name)) return 2;
+  if (/^zh/i.test(voice.lang)) return 3;
+  return 4;
+}
+
 function autoNextButton(value, label) {
   return `<button type="button" class="${state.reader.audioAutoNext === value ? "active" : ""}" data-auto-next="${value}">${label}</button>`;
 }
@@ -713,6 +794,23 @@ function bindEvents() {
       render();
     });
   });
+
+  $app.querySelectorAll("[data-audio-style]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.reader.audioStyle = button.dataset.audioStyle === "plain" ? "plain" : "emotive";
+      persistReader();
+      render();
+    });
+  });
+
+  const voiceSelectElement = $app.querySelector("[data-input='voice-select']");
+  if (voiceSelectElement) {
+    voiceSelectElement.addEventListener("change", () => {
+      state.reader.audioVoiceURI = voiceSelectElement.value;
+      persistReader();
+      render();
+    });
+  }
 
   $app.querySelectorAll("[data-auto-next]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -804,6 +902,16 @@ function handleAction(action) {
       break;
     case "audio-rate-plus":
       state.reader.audioRate = clamp(Number((state.reader.audioRate + 0.1).toFixed(1)), 0.7, 1.4);
+      persistReader();
+      render();
+      break;
+    case "audio-pitch-minus":
+      state.reader.audioPitch = clamp(Number((state.reader.audioPitch - 0.1).toFixed(1)), 0.8, 1.2);
+      persistReader();
+      render();
+      break;
+    case "audio-pitch-plus":
+      state.reader.audioPitch = clamp(Number((state.reader.audioPitch + 0.1).toFixed(1)), 0.8, 1.2);
       persistReader();
       render();
       break;
@@ -1008,6 +1116,12 @@ function sleepStatusLabel() {
   return state.reader.sleepMinutes ? `${state.reader.sleepMinutes} 分鐘定時` : "定時關";
 }
 
+function audioModeLabel() {
+  const style = state.reader.audioStyle === "emotive" ? "感情" : "標準";
+  const voice = selectedVoice();
+  return voice ? `${style} · ${voice.name}` : style;
+}
+
 function speakNextChunk() {
   if (!state.audio.active || !audioSupported()) return;
 
@@ -1016,7 +1130,9 @@ function speakNextChunk() {
     return;
   }
 
-  const utterance = new SpeechSynthesisUtterance(speechQueue[speechIndex]);
+  const segment = speechQueue[speechIndex];
+  const prosody = segmentProsody(segment.text, segment.type);
+  const utterance = new SpeechSynthesisUtterance(segment.text);
   const voice = preferredVoice();
   if (voice) {
     utterance.voice = voice;
@@ -1024,14 +1140,18 @@ function speakNextChunk() {
   } else {
     utterance.lang = "zh-Hant";
   }
-  utterance.rate = state.reader.audioRate;
-  utterance.pitch = 1;
+  utterance.rate = prosody.rate;
+  utterance.pitch = prosody.pitch;
   utterance.volume = 1;
 
   utterance.onend = () => {
     if (!state.audio.active) return;
     speechIndex += 1;
-    speakNextChunk();
+    window.setTimeout(() => {
+      if (state.audio.active && !state.audio.paused) {
+        speakNextChunk();
+      }
+    }, prosody.pauseAfter);
   };
 
   utterance.onerror = (event) => {
@@ -1046,53 +1166,130 @@ function speakNextChunk() {
 }
 
 function buildSpeechQueue(chapter) {
-  const text = `${chapter.title}\n${chapter.content}`
+  const segments = [];
+  pushSpeechSegment(segments, chapter.title, "title");
+
+  chapter.content
     .replace(/\r/g, "")
-    .replace(/\n+/g, "。")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .forEach((paragraph) => {
+      const type = classifySpeechText(paragraph);
+      splitSpeechText(paragraph).forEach((sentence) => {
+        pushSpeechSegment(segments, sentence, type);
+      });
+    });
+
+  return segments;
+}
+
+function splitSpeechText(text) {
+  const sentences = text
+    .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
-    .trim();
-  const sentences = text.match(/[^。！？!?；;：:]+[。！？!?；;：:]?/g) || [text];
-  const chunks = [];
-  let current = "";
+    .trim()
+    .match(/[^。！？!?；;：:]+[。！？!?；;：:]?/g);
 
-  sentences.forEach((sentence) => {
-    const clean = sentence.trim();
-    if (!clean) return;
+  return sentences?.length ? sentences.map((sentence) => sentence.trim()).filter(Boolean) : [text.trim()].filter(Boolean);
+}
 
-    if (clean.length > 170) {
-      if (current) {
-        chunks.push(current);
-        current = "";
-      }
-      for (let index = 0; index < clean.length; index += 150) {
-        chunks.push(clean.slice(index, index + 150));
-      }
-      return;
+function pushSpeechSegment(segments, text, type) {
+  const clean = text.trim();
+  if (!clean) return;
+
+  const maxLength = type === "dialogue" ? 120 : 155;
+  for (let index = 0; index < clean.length; index += maxLength) {
+    const part = clean.slice(index, index + maxLength).trim();
+    if (part) {
+      segments.push(createSpeechSegment(part, type));
     }
+  }
+}
 
-    if ((current + clean).length > 170) {
-      chunks.push(current);
-      current = clean;
-    } else {
-      current += clean;
-    }
-  });
+function classifySpeechText(text) {
+  const clean = text.trim();
+  if (/^【.+】$/.test(clean)) return "system";
+  if (/^[「“『].+[」”』]$/.test(clean) || /[：:]\s*[「“『]/.test(clean) || /[「」“”『』]/.test(clean)) return "dialogue";
+  if (/[？！!?]$/.test(clean) || /轟|咚|砰|叮|咔|警告|倒計時/.test(clean)) return "emphasis";
+  return "narration";
+}
 
-  if (current) {
-    chunks.push(current);
+function createSpeechSegment(text, type) {
+  return {
+    text,
+    type
+  };
+}
+
+function segmentProsody(text, type) {
+  const baseRate = state.reader.audioRate;
+  const basePitch = state.reader.audioPitch;
+
+  if (state.reader.audioStyle !== "emotive") {
+    return {
+      rate: baseRate,
+      pitch: basePitch,
+      pauseAfter: punctuationPause(text, 120)
+    };
   }
 
-  return chunks;
+  const exclaim = /[！!]/.test(text);
+  const question = /[？?]/.test(text);
+
+  if (type === "title") {
+    return { rate: clamp(baseRate * 0.9, 0.7, 1.4), pitch: clamp(basePitch + 0.02, 0.8, 1.2), pauseAfter: 720 };
+  }
+
+  if (type === "system") {
+    return { rate: clamp(baseRate * 0.96, 0.7, 1.4), pitch: clamp(basePitch - 0.05, 0.8, 1.2), pauseAfter: punctuationPause(text, 360) };
+  }
+
+  if (type === "dialogue") {
+    return {
+      rate: clamp(baseRate * (exclaim ? 1.08 : 1.02), 0.7, 1.4),
+      pitch: clamp(basePitch + (question ? 0.07 : 0.04), 0.8, 1.2),
+      pauseAfter: punctuationPause(text, exclaim ? 260 : 220)
+    };
+  }
+
+  if (type === "emphasis") {
+    return {
+      rate: clamp(baseRate * (exclaim ? 1.06 : 0.98), 0.7, 1.4),
+      pitch: clamp(basePitch + (exclaim ? 0.08 : 0.03), 0.8, 1.2),
+      pauseAfter: punctuationPause(text, 340)
+    };
+  }
+
+  return {
+    rate: clamp(baseRate * 0.98, 0.7, 1.4),
+    pitch: basePitch,
+    pauseAfter: punctuationPause(text, 240)
+  };
+}
+
+function punctuationPause(text, basePause) {
+  if (/[。！？!?]$/.test(text)) return basePause + 180;
+  if (/[；;：:]$/.test(text)) return basePause + 120;
+  if (/[，,、]$/.test(text)) return basePause + 60;
+  return basePause;
 }
 
 function preferredVoice() {
   if (!audioSupported()) return null;
 
   cachedVoices = window.speechSynthesis.getVoices();
-  return cachedVoices.find((voice) => /^zh-(HK|TW|MO)$/i.test(voice.lang))
+  return selectedVoice()
+    || cachedVoices.find((voice) => /^zh-(HK|TW|MO)$/i.test(voice.lang))
     || cachedVoices.find((voice) => /^zh-Hant/i.test(voice.lang))
     || cachedVoices.find((voice) => /^zh/i.test(voice.lang))
     || null;
+}
+
+function selectedVoice() {
+  if (!audioSupported() || !state.reader.audioVoiceURI) return null;
+  cachedVoices = window.speechSynthesis.getVoices();
+  return cachedVoices.find((voice) => voice.voiceURI === state.reader.audioVoiceURI) || null;
 }
 
 function currentChapter() {
