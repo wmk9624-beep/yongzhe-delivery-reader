@@ -4,3 +4,6 @@ Thumbs.db
 .env
 .env.*
 node_modules/
+.github_device_code.json
+.github_token.tmp
+gh-auth-login.*
