@@ -8,6 +8,9 @@ const icons = {
   read: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7v14"></path><path d="M4 19.5V5.5A2.5 2.5 0 0 1 6.5 3H12v18H6.5A2.5 2.5 0 0 1 4 19.5Z"></path><path d="M20 19.5V5.5A2.5 2.5 0 0 0 17.5 3H12v18h5.5A2.5 2.5 0 0 0 20 19.5Z"></path></svg>`,
   user: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path></svg>`,
   play: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"></path></svg>`,
+  pause: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14"></path><path d="M16 5v14"></path></svg>`,
+  stop: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10"></rect></svg>`,
+  headphones: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14a8 8 0 0 1 16 0"></path><path d="M4 14v4a2 2 0 0 0 2 2h2v-8H6a2 2 0 0 0-2 2Z"></path><path d="M20 14v4a2 2 0 0 1-2 2h-2v-8h2a2 2 0 0 1 2 2Z"></path></svg>`,
   plus: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>`,
   menu: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="M4 12h16"></path><path d="M4 17h16"></path></svg>`,
   settings: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.08a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.08a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.08a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.24.6.84 1 1.55 1H21a2 2 0 1 1 0 4h-.08a1.7 1.7 0 0 0-1.52 1Z"></path></svg>`,
@@ -26,7 +29,13 @@ const state = {
   },
   reader: {
     fontSize: 18,
-    theme: "paper"
+    theme: "paper",
+    audioRate: 1
+  },
+  audio: {
+    active: false,
+    paused: false,
+    chapterId: null
   }
 };
 
@@ -36,7 +45,20 @@ const STORAGE_KEYS = {
   shelf: "brave-delivery-shelf"
 };
 
+let speechQueue = [];
+let speechIndex = 0;
+let activeUtterance = null;
+let cachedVoices = [];
+
 init();
+
+if (audioSupported()) {
+  cachedVoices = window.speechSynthesis.getVoices();
+  window.speechSynthesis.addEventListener("voiceschanged", () => {
+    cachedVoices = window.speechSynthesis.getVoices();
+  });
+  window.addEventListener("pagehide", () => stopAudio(false));
+}
 
 async function init() {
   loadLocalState();
@@ -73,7 +95,8 @@ function loadLocalState() {
   if (storedReader) {
     state.reader = {
       fontSize: clamp(Number(storedReader.fontSize) || 18, 15, 24),
-      theme: storedReader.theme || "paper"
+      theme: storedReader.theme || "paper",
+      audioRate: clamp(Number(storedReader.audioRate) || 1, 0.7, 1.4)
     };
   }
 }
@@ -180,6 +203,7 @@ function homeView() {
       </div>
       <div class="actions">
         <button class="primary-button" type="button" data-action="continue">${icons.play}<span>繼續閱讀</span></button>
+        <button class="secondary-button" type="button" data-action="listen-current" aria-label="開始聽書">${icons.headphones}</button>
         <button class="secondary-button" type="button" data-action="shelf-add" aria-label="加入書架">${icons.bookmark}</button>
       </div>
     </section>
@@ -211,6 +235,7 @@ function shelfView() {
         <h2>${escapeHtml(state.book.title)}</h2>
         <p>${escapeHtml(current.title)} · 已讀 ${progressPercent()}%</p>
         <button class="primary-button wide-button" type="button" data-action="continue">${icons.play}<span>繼續閱讀</span></button>
+        <button class="secondary-button wide-button" type="button" data-action="listen-current">${icons.headphones}<span>開始聽書</span></button>
       </div>
     </article>
 
@@ -274,6 +299,14 @@ function profileView() {
           <button type="button" data-action="font-plus">A+</button>
         </div>
       </div>
+      <div class="setting-row">
+        <span>語速</span>
+        <div class="speed-control">
+          <button type="button" data-action="audio-rate-minus">慢</button>
+          <strong>${state.reader.audioRate.toFixed(1)}x</strong>
+          <button type="button" data-action="audio-rate-plus">快</button>
+        </div>
+      </div>
     </section>
   `;
 }
@@ -307,9 +340,33 @@ function readerView() {
           <button type="button" data-chapter="${next ? next.id : ""}" ${next ? "" : "disabled"}>下一章</button>
         </div>
       </article>
+      ${audioDock(chapter)}
       ${settingsSheet()}
     </section>
     ${toastHost()}
+  `;
+}
+
+function audioDock(chapter) {
+  const supported = audioSupported();
+  const active = state.audio.active && state.audio.chapterId === chapter.id;
+  const paused = active && state.audio.paused;
+  const mainAction = active ? (paused ? "audio-resume" : "audio-pause") : "audio-play";
+  const mainIcon = active && !paused ? icons.pause : icons.headphones;
+  const mainLabel = !supported ? "不支援聽書" : active ? (paused ? "繼續播放" : "暫停") : "朗讀本章";
+  const status = !supported ? "瀏覽器未支援" : active ? (paused ? "已暫停" : "朗讀中") : "聽書模式";
+
+  return `
+    <div class="audio-dock ${active ? "active" : ""}">
+      <button class="audio-main" type="button" data-action="${mainAction}" ${supported ? "" : "disabled"} aria-label="${mainLabel}">
+        ${mainIcon}<span>${mainLabel}</span>
+      </button>
+      <div class="audio-meta">
+        <strong>${status}</strong>
+        <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${state.reader.audioRate.toFixed(1)}x</span>
+      </div>
+      <button class="audio-stop" type="button" data-action="audio-stop" ${active ? "" : "disabled"} aria-label="停止朗讀">${icons.stop}</button>
+    </div>
   `;
 }
 
@@ -329,6 +386,14 @@ function settingsSheet() {
         <div class="stepper">
           <button type="button" data-action="font-minus">A-</button>
           <button type="button" data-action="font-plus">A+</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span>語速</span>
+        <div class="speed-control">
+          <button type="button" data-action="audio-rate-minus">慢</button>
+          <strong>${state.reader.audioRate.toFixed(1)}x</strong>
+          <button type="button" data-action="audio-rate-plus">快</button>
         </div>
       </div>
       <button class="primary-button wide-button" type="button" data-action="toggle-settings">完成</button>
@@ -428,11 +493,13 @@ function bindEvents() {
 function handleAction(action) {
   switch (action) {
     case "home":
+      stopAudio(false);
       state.view = "home";
       state.settingsOpen = false;
       render();
       break;
     case "catalog":
+      stopAudio(false);
       state.view = "catalog";
       state.settingsOpen = false;
       render();
@@ -440,14 +507,31 @@ function handleAction(action) {
     case "continue":
       openChapter(state.progress.chapterId || 1, true);
       break;
+    case "listen-current":
+      openChapter(state.progress.chapterId || 1, true);
+      startAudio(state.readingChapterId);
+      break;
     case "shelf-add":
       writeStorage(STORAGE_KEYS.shelf, { added: true, at: Date.now() });
       showToast("已加入書架");
       break;
     case "exit-reader":
+      stopAudio(false);
       state.view = "home";
       state.settingsOpen = false;
       render();
+      break;
+    case "audio-play":
+      startAudio(state.readingChapterId);
+      break;
+    case "audio-pause":
+      pauseAudio();
+      break;
+    case "audio-resume":
+      resumeAudio();
+      break;
+    case "audio-stop":
+      stopAudio();
       break;
     case "toggle-settings":
       state.settingsOpen = !state.settingsOpen;
@@ -463,12 +547,26 @@ function handleAction(action) {
       persistReader();
       render();
       break;
+    case "audio-rate-minus":
+      state.reader.audioRate = clamp(Number((state.reader.audioRate - 0.1).toFixed(1)), 0.7, 1.4);
+      persistReader();
+      render();
+      break;
+    case "audio-rate-plus":
+      state.reader.audioRate = clamp(Number((state.reader.audioRate + 0.1).toFixed(1)), 0.7, 1.4);
+      persistReader();
+      render();
+      break;
   }
 }
 
 function openChapter(id, restore = false) {
   const chapter = state.book.chapters.find((item) => item.id === id);
   if (!chapter) return;
+
+  if (state.audio.active && state.audio.chapterId !== id) {
+    stopAudio(false);
+  }
 
   state.readingChapterId = id;
   state.view = "reader";
@@ -480,6 +578,165 @@ function openChapter(id, restore = false) {
   }
 
   render();
+}
+
+function audioSupported() {
+  return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
+}
+
+function startAudio(chapterId) {
+  if (!audioSupported()) {
+    showToast("這個瀏覽器暫時不支援聽書");
+    return;
+  }
+
+  const chapter = state.book.chapters.find((item) => item.id === chapterId);
+  if (!chapter) return;
+
+  stopAudio(false);
+  speechQueue = buildSpeechQueue(chapter);
+  speechIndex = 0;
+  state.audio = {
+    active: true,
+    paused: false,
+    chapterId: chapter.id
+  };
+
+  speakNextChunk();
+  render();
+}
+
+function pauseAudio() {
+  if (!state.audio.active || !audioSupported()) return;
+  window.speechSynthesis.pause();
+  state.audio.paused = true;
+  render();
+}
+
+function resumeAudio() {
+  if (!state.audio.active || !audioSupported()) return;
+  window.speechSynthesis.resume();
+  state.audio.paused = false;
+  render();
+}
+
+function stopAudio(shouldRender = true) {
+  if (audioSupported()) {
+    window.speechSynthesis.cancel();
+  }
+
+  speechQueue = [];
+  speechIndex = 0;
+  activeUtterance = null;
+  state.audio = {
+    active: false,
+    paused: false,
+    chapterId: null
+  };
+
+  if (shouldRender) {
+    render();
+  }
+}
+
+function finishAudio() {
+  speechQueue = [];
+  speechIndex = 0;
+  activeUtterance = null;
+  state.audio = {
+    active: false,
+    paused: false,
+    chapterId: null
+  };
+  render();
+  showToast("本章朗讀完畢");
+}
+
+function speakNextChunk() {
+  if (!state.audio.active || !audioSupported()) return;
+
+  if (speechIndex >= speechQueue.length) {
+    finishAudio();
+    return;
+  }
+
+  const utterance = new SpeechSynthesisUtterance(speechQueue[speechIndex]);
+  const voice = preferredVoice();
+  if (voice) {
+    utterance.voice = voice;
+    utterance.lang = voice.lang;
+  } else {
+    utterance.lang = "zh-Hant";
+  }
+  utterance.rate = state.reader.audioRate;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+
+  utterance.onend = () => {
+    if (!state.audio.active) return;
+    speechIndex += 1;
+    speakNextChunk();
+  };
+
+  utterance.onerror = (event) => {
+    if (!state.audio.active || event.error === "interrupted" || event.error === "canceled") return;
+    stopAudio(false);
+    render();
+    showToast("朗讀被瀏覽器中止");
+  };
+
+  activeUtterance = utterance;
+  window.speechSynthesis.speak(utterance);
+}
+
+function buildSpeechQueue(chapter) {
+  const text = `${chapter.title}\n${chapter.content}`
+    .replace(/\r/g, "")
+    .replace(/\n+/g, "。")
+    .replace(/\s+/g, " ")
+    .trim();
+  const sentences = text.match(/[^。！？!?；;：:]+[。！？!?；;：:]?/g) || [text];
+  const chunks = [];
+  let current = "";
+
+  sentences.forEach((sentence) => {
+    const clean = sentence.trim();
+    if (!clean) return;
+
+    if (clean.length > 170) {
+      if (current) {
+        chunks.push(current);
+        current = "";
+      }
+      for (let index = 0; index < clean.length; index += 150) {
+        chunks.push(clean.slice(index, index + 150));
+      }
+      return;
+    }
+
+    if ((current + clean).length > 170) {
+      chunks.push(current);
+      current = clean;
+    } else {
+      current += clean;
+    }
+  });
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
+function preferredVoice() {
+  if (!audioSupported()) return null;
+
+  cachedVoices = window.speechSynthesis.getVoices();
+  return cachedVoices.find((voice) => /^zh-(HK|TW|MO)$/i.test(voice.lang))
+    || cachedVoices.find((voice) => /^zh-Hant/i.test(voice.lang))
+    || cachedVoices.find((voice) => /^zh/i.test(voice.lang))
+    || null;
 }
 
 function currentChapter() {

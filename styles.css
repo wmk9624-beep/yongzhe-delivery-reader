@@ -354,7 +354,7 @@ button {
 
 .actions {
   display: grid;
-  grid-template-columns: 1fr 48px;
+  grid-template-columns: 1fr 48px 48px;
   gap: 10px;
   margin-top: 12px;
 }
@@ -586,7 +586,7 @@ button {
 .reader-content {
   flex: 1 1 auto;
   overflow: auto;
-  padding: 6px 24px 92px;
+  padding: 6px 24px 164px;
   scrollbar-width: none;
 }
 
@@ -626,6 +626,82 @@ button {
   cursor: default;
 }
 
+.audio-dock {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  z-index: 30;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(13, 59, 66, 0.12);
+  border-radius: 20px;
+  background: rgba(255, 252, 244, 0.94);
+  box-shadow: 0 16px 34px rgba(20, 45, 48, 0.16);
+  backdrop-filter: blur(16px);
+}
+
+.audio-dock.active {
+  border-color: rgba(214, 168, 61, 0.45);
+  box-shadow: 0 16px 36px rgba(145, 94, 19, 0.18);
+}
+
+.audio-main,
+.audio-stop {
+  min-height: 42px;
+  border-radius: var(--radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+}
+
+.audio-main {
+  min-width: 112px;
+  gap: 7px;
+  padding: 0 12px;
+  background: var(--brand);
+}
+
+.audio-stop {
+  width: 42px;
+  background: #8b6b32;
+}
+
+.audio-main:disabled,
+.audio-stop:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.audio-meta {
+  min-width: 0;
+}
+
+.audio-meta strong,
+.audio-meta span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audio-meta strong {
+  color: var(--reader-ink, #2f241c);
+  font-size: 13px;
+}
+
+.audio-meta span {
+  margin-top: 3px;
+  color: rgba(47, 36, 28, 0.62);
+  font-size: 12px;
+}
+
 .settings-sheet {
   position: absolute;
   left: 14px;
@@ -659,13 +735,15 @@ button {
 }
 
 .segmented,
-.stepper {
+.stepper,
+.speed-control {
   display: flex;
   gap: 8px;
 }
 
 .segmented button,
-.stepper button {
+.stepper button,
+.speed-control button {
   min-height: 38px;
   flex: 1;
   border-radius: var(--radius);
@@ -679,9 +757,29 @@ button {
   color: #fff;
 }
 
+.speed-control {
+  align-items: center;
+}
+
+.speed-control strong {
+  min-width: 48px;
+  text-align: center;
+  color: var(--brand);
+  font-size: 13px;
+}
+
 .reader-dark {
   --reader-bg: #172225;
   --reader-ink: #e8e1d7;
+}
+
+.reader-dark .audio-dock {
+  border-color: rgba(232, 225, 215, 0.12);
+  background: rgba(26, 39, 43, 0.94);
+}
+
+.reader-dark .audio-meta span {
+  color: rgba(232, 225, 215, 0.62);
 }
 
 .reader-green {
