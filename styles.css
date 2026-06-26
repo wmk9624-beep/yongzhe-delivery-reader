@@ -376,6 +376,12 @@ button {
   box-shadow: 0 12px 24px rgba(13, 59, 66, 0.22);
 }
 
+.primary-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+  box-shadow: none;
+}
+
 .secondary-button {
   background: #fff7df;
   color: #7b5712;
@@ -736,14 +742,16 @@ button {
 
 .segmented,
 .stepper,
-.speed-control {
+.speed-control,
+.timer-buttons {
   display: flex;
   gap: 8px;
 }
 
 .segmented button,
 .stepper button,
-.speed-control button {
+.speed-control button,
+.timer-buttons button {
   min-height: 38px;
   flex: 1;
   border-radius: var(--radius);
@@ -757,6 +765,16 @@ button {
   color: #fff;
 }
 
+.timer-buttons {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.timer-buttons button.active {
+  background: var(--brand);
+  color: #fff;
+}
+
 .speed-control {
   align-items: center;
 }
@@ -766,6 +784,35 @@ button {
   text-align: center;
   color: var(--brand);
   font-size: 13px;
+}
+
+.app-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.app-mode-grid div {
+  min-width: 0;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.app-mode-grid strong,
+.app-mode-grid span {
+  display: block;
+}
+
+.app-mode-grid strong {
+  color: var(--brand);
+  font-size: 15px;
+}
+
+.app-mode-grid span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .reader-dark {

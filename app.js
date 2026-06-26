@@ -30,12 +30,19 @@ const state = {
   reader: {
     fontSize: 18,
     theme: "paper",
-    audioRate: 1
+    audioRate: 1,
+    audioAutoNext: true,
+    sleepMinutes: 0
   },
   audio: {
     active: false,
     paused: false,
     chapterId: null
+  },
+  pwa: {
+    installAvailable: false,
+    installed: window.matchMedia("(display-mode: standalone)").matches,
+    offlineReady: false
   }
 };
 
@@ -49,8 +56,13 @@ let speechQueue = [];
 let speechIndex = 0;
 let activeUtterance = null;
 let cachedVoices = [];
+let sleepTimerId = null;
+let sleepEndsAt = null;
+let installPromptEvent = null;
 
 init();
+setupPwaInstall();
+registerServiceWorker();
 
 if (audioSupported()) {
   cachedVoices = window.speechSynthesis.getVoices();
@@ -96,7 +108,9 @@ function loadLocalState() {
     state.reader = {
       fontSize: clamp(Number(storedReader.fontSize) || 18, 15, 24),
       theme: storedReader.theme || "paper",
-      audioRate: clamp(Number(storedReader.audioRate) || 1, 0.7, 1.4)
+      audioRate: clamp(Number(storedReader.audioRate) || 1, 0.7, 1.4),
+      audioAutoNext: storedReader.audioAutoNext !== false,
+      sleepMinutes: [0, 15, 30, 60].includes(Number(storedReader.sleepMinutes)) ? Number(storedReader.sleepMinutes) : 0
     };
   }
 }
@@ -112,6 +126,58 @@ function readStorage(key) {
 
 function writeStorage(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function setupPwaInstall() {
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    installPromptEvent = event;
+    state.pwa.installAvailable = true;
+    render();
+  });
+
+  window.addEventListener("appinstalled", () => {
+    installPromptEvent = null;
+    state.pwa.installAvailable = false;
+    state.pwa.installed = true;
+    render();
+    showToast("已安裝到主畫面");
+  });
+}
+
+function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+
+  window.addEventListener("load", async () => {
+    try {
+      await navigator.serviceWorker.register("./service-worker.js");
+      await navigator.serviceWorker.ready;
+      state.pwa.offlineReady = true;
+      render();
+    } catch {
+      state.pwa.offlineReady = false;
+    }
+  });
+}
+
+async function installApp() {
+  if (state.pwa.installed) {
+    showToast("App 已安裝");
+    return;
+  }
+
+  if (!installPromptEvent) {
+    showToast("可用瀏覽器選單加入主畫面");
+    return;
+  }
+
+  installPromptEvent.prompt();
+  const choice = await installPromptEvent.userChoice;
+  installPromptEvent = null;
+  state.pwa.installAvailable = false;
+  state.pwa.installed = choice.outcome === "accepted";
+  render();
+  showToast(state.pwa.installed ? "已安裝到主畫面" : "已取消安裝");
 }
 
 function render() {
@@ -307,6 +373,34 @@ function profileView() {
           <button type="button" data-action="audio-rate-plus">快</button>
         </div>
       </div>
+      <div class="setting-row">
+        <span>連播</span>
+        <div class="segmented">
+          ${autoNextButton(true, "開")}
+          ${autoNextButton(false, "關")}
+        </div>
+      </div>
+      <div class="setting-row">
+        <span>定時</span>
+        <div class="timer-buttons">
+          ${sleepButton(0, "關")}
+          ${sleepButton(15, "15")}
+          ${sleepButton(30, "30")}
+          ${sleepButton(60, "60")}
+        </div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-header">
+        <h2>App 模式</h2>
+      </div>
+      <div class="app-mode-grid">
+        <div><strong>${state.pwa.offlineReady ? "已啟用" : "準備中"}</strong><span>離線閱讀</span></div>
+        <div><strong>${state.pwa.installed ? "已安裝" : "可安裝"}</strong><span>手機主畫面</span></div>
+      </div>
+      <button class="primary-button wide-button" type="button" data-action="install-app" ${state.pwa.installed ? "disabled" : ""}>
+        ${icons.plus}<span>${state.pwa.installed ? "已安裝" : "安裝 App"}</span>
+      </button>
     </section>
   `;
 }
@@ -363,7 +457,7 @@ function audioDock(chapter) {
       </button>
       <div class="audio-meta">
         <strong>${status}</strong>
-        <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${state.reader.audioRate.toFixed(1)}x</span>
+        <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${state.reader.audioRate.toFixed(1)}x · ${sleepStatusLabel()}</span>
       </div>
       <button class="audio-stop" type="button" data-action="audio-stop" ${active ? "" : "disabled"} aria-label="停止朗讀">${icons.stop}</button>
     </div>
@@ -394,6 +488,22 @@ function settingsSheet() {
           <button type="button" data-action="audio-rate-minus">慢</button>
           <strong>${state.reader.audioRate.toFixed(1)}x</strong>
           <button type="button" data-action="audio-rate-plus">快</button>
+        </div>
+      </div>
+      <div class="setting-row">
+        <span>連播</span>
+        <div class="segmented">
+          ${autoNextButton(true, "開")}
+          ${autoNextButton(false, "關")}
+        </div>
+      </div>
+      <div class="setting-row">
+        <span>定時</span>
+        <div class="timer-buttons">
+          ${sleepButton(0, "關")}
+          ${sleepButton(15, "15")}
+          ${sleepButton(30, "30")}
+          ${sleepButton(60, "60")}
         </div>
       </div>
       <button class="primary-button wide-button" type="button" data-action="toggle-settings">完成</button>
@@ -435,6 +545,15 @@ function chapterRow(chapter) {
 
 function themeButton(theme, label) {
   return `<button type="button" class="${state.reader.theme === theme ? "active" : ""}" data-theme="${theme}">${label}</button>`;
+}
+
+function autoNextButton(value, label) {
+  return `<button type="button" class="${state.reader.audioAutoNext === value ? "active" : ""}" data-auto-next="${value}">${label}</button>`;
+}
+
+function sleepButton(minutes, label) {
+  const active = state.reader.sleepMinutes === minutes ? "active" : "";
+  return `<button type="button" class="${active}" data-sleep-minutes="${minutes}">${label}</button>`;
 }
 
 function toastHost() {
@@ -484,6 +603,20 @@ function bindEvents() {
     });
   });
 
+  $app.querySelectorAll("[data-auto-next]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.reader.audioAutoNext = button.dataset.autoNext === "true";
+      persistReader();
+      render();
+    });
+  });
+
+  $app.querySelectorAll("[data-sleep-minutes]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setSleepTimer(Number(button.dataset.sleepMinutes));
+    });
+  });
+
   const reader = $app.querySelector("[data-reader-content]");
   if (reader) {
     reader.addEventListener("scroll", throttle(() => saveReaderProgress(reader), 280));
@@ -514,6 +647,9 @@ function handleAction(action) {
     case "shelf-add":
       writeStorage(STORAGE_KEYS.shelf, { added: true, at: Date.now() });
       showToast("已加入書架");
+      break;
+    case "install-app":
+      installApp();
       break;
     case "exit-reader":
       stopAudio(false);
@@ -584,7 +720,7 @@ function audioSupported() {
   return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 }
 
-function startAudio(chapterId) {
+function startAudio(chapterId, options = {}) {
   if (!audioSupported()) {
     showToast("這個瀏覽器暫時不支援聽書");
     return;
@@ -593,7 +729,7 @@ function startAudio(chapterId) {
   const chapter = state.book.chapters.find((item) => item.id === chapterId);
   if (!chapter) return;
 
-  stopAudio(false);
+  stopAudio(false, { keepSleepTimer: options.keepSleepTimer === true });
   speechQueue = buildSpeechQueue(chapter);
   speechIndex = 0;
   state.audio = {
@@ -602,6 +738,7 @@ function startAudio(chapterId) {
     chapterId: chapter.id
   };
 
+  ensureSleepTimer();
   speakNextChunk();
   render();
 }
@@ -617,14 +754,18 @@ function resumeAudio() {
   if (!state.audio.active || !audioSupported()) return;
   window.speechSynthesis.resume();
   state.audio.paused = false;
+  ensureSleepTimer();
   render();
 }
 
-function stopAudio(shouldRender = true) {
+function stopAudio(shouldRender = true, options = {}) {
   if (audioSupported()) {
     window.speechSynthesis.cancel();
   }
 
+  if (!options.keepSleepTimer) {
+    clearSleepTimer();
+  }
   speechQueue = [];
   speechIndex = 0;
   activeUtterance = null;
@@ -640,6 +781,9 @@ function stopAudio(shouldRender = true) {
 }
 
 function finishAudio() {
+  const finishedChapterId = state.audio.chapterId;
+  const followingChapter = state.reader.audioAutoNext ? nextChapter(finishedChapterId) : null;
+
   speechQueue = [];
   speechIndex = 0;
   activeUtterance = null;
@@ -648,8 +792,85 @@ function finishAudio() {
     paused: false,
     chapterId: null
   };
+
+  if (followingChapter && !sleepTimerExpired()) {
+    state.progress = { chapterId: followingChapter.id, ratio: 0 };
+    state.readingChapterId = followingChapter.id;
+    state.view = "reader";
+    state.settingsOpen = false;
+    persistProgress();
+    render();
+    showToast("自動播放下一章");
+    startAudio(followingChapter.id, { keepSleepTimer: true });
+    return;
+  }
+
+  clearSleepTimer(false);
   render();
-  showToast("本章朗讀完畢");
+  showToast(followingChapter ? "睡眠定時已停止朗讀" : "本章朗讀完畢");
+}
+
+function setSleepTimer(minutes) {
+  const allowedMinutes = [0, 15, 30, 60].includes(minutes) ? minutes : 0;
+  state.reader.sleepMinutes = allowedMinutes;
+  persistReader();
+  clearSleepTimer();
+
+  if (allowedMinutes && state.audio.active && !state.audio.paused) {
+    sleepEndsAt = Date.now() + allowedMinutes * 60 * 1000;
+    scheduleSleepTimer();
+  }
+
+  render();
+  showToast(allowedMinutes ? `已設定 ${allowedMinutes} 分鐘後停止` : "已關閉睡眠定時");
+}
+
+function ensureSleepTimer() {
+  if (!state.reader.sleepMinutes || !state.audio.active || state.audio.paused) {
+    clearSleepTimer();
+    return;
+  }
+
+  if (!sleepEndsAt) {
+    sleepEndsAt = Date.now() + state.reader.sleepMinutes * 60 * 1000;
+  }
+
+  scheduleSleepTimer();
+}
+
+function scheduleSleepTimer() {
+  window.clearTimeout(sleepTimerId);
+  if (!sleepEndsAt) return;
+
+  const delay = Math.max(0, sleepEndsAt - Date.now());
+  sleepTimerId = window.setTimeout(() => {
+    sleepTimerId = null;
+    sleepEndsAt = null;
+    state.reader.sleepMinutes = 0;
+    persistReader();
+    stopAudio(false, { keepSleepTimer: true });
+    render();
+    showToast("睡眠定時已停止朗讀");
+  }, delay);
+}
+
+function clearSleepTimer() {
+  window.clearTimeout(sleepTimerId);
+  sleepTimerId = null;
+  sleepEndsAt = null;
+}
+
+function sleepTimerExpired() {
+  return Boolean(sleepEndsAt && Date.now() >= sleepEndsAt);
+}
+
+function sleepStatusLabel() {
+  if (sleepEndsAt) {
+    const remaining = Math.max(1, Math.ceil((sleepEndsAt - Date.now()) / 60000));
+    return `${remaining} 分鐘後停`;
+  }
+
+  return state.reader.sleepMinutes ? `${state.reader.sleepMinutes} 分鐘定時` : "定時關";
 }
 
 function speakNextChunk() {
