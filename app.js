@@ -18,11 +18,14 @@ const icons = {
 };
 
 const state = {
+  books: [],
   book: null,
+  activeBookId: "brave-delivery",
   view: "home",
   query: "",
   readingChapterId: 1,
   settingsOpen: false,
+  progressByBook: {},
   progress: {
     chapterId: 1,
     ratio: 0
@@ -48,6 +51,8 @@ const state = {
 
 const STORAGE_KEYS = {
   progress: "brave-delivery-progress",
+  progressByBook: "brave-delivery-progress-by-book",
+  selectedBook: "brave-delivery-selected-book",
   reader: "brave-delivery-reader",
   shelf: "brave-delivery-shelf"
 };
@@ -76,12 +81,8 @@ async function init() {
   loadLocalState();
 
   try {
-    const response = await fetch("data/book.json");
-    if (!response.ok) {
-      throw new Error("book data not found");
-    }
-    state.book = await response.json();
-    state.readingChapterId = state.progress.chapterId || 1;
+    await loadLibrary();
+    await loadBook(state.activeBookId);
     render();
   } catch (error) {
     $app.innerHTML = `
@@ -95,13 +96,18 @@ async function init() {
 
 function loadLocalState() {
   const storedProgress = readStorage(STORAGE_KEYS.progress);
+  const storedProgressByBook = readStorage(STORAGE_KEYS.progressByBook);
+  const storedSelectedBook = readStorage(STORAGE_KEYS.selectedBook);
   const storedReader = readStorage(STORAGE_KEYS.reader);
 
-  if (storedProgress) {
-    state.progress = {
-      chapterId: Number(storedProgress.chapterId) || 1,
-      ratio: Number(storedProgress.ratio) || 0
-    };
+  state.activeBookId = storedSelectedBook || state.activeBookId;
+
+  if (storedProgressByBook && typeof storedProgressByBook === "object") {
+    state.progressByBook = storedProgressByBook;
+  }
+
+  if (storedProgress && !state.progressByBook["brave-delivery"]) {
+    state.progressByBook["brave-delivery"] = normalizeProgress(storedProgress);
   }
 
   if (storedReader) {
@@ -113,6 +119,43 @@ function loadLocalState() {
       sleepMinutes: [0, 15, 30, 60].includes(Number(storedReader.sleepMinutes)) ? Number(storedReader.sleepMinutes) : 0
     };
   }
+}
+
+async function loadLibrary() {
+  const response = await fetch("data/books.json");
+  if (!response.ok) {
+    throw new Error("book library not found");
+  }
+
+  const library = await response.json();
+  const books = Array.isArray(library.books) ? library.books : [];
+  if (!books.length) {
+    throw new Error("empty book library");
+  }
+
+  state.books = books;
+  if (!books.some((book) => book.id === state.activeBookId)) {
+    state.activeBookId = library.defaultBookId || books[0].id;
+  }
+}
+
+async function loadBook(bookId) {
+  const meta = bookMeta(bookId) || state.books[0];
+  if (!meta) {
+    throw new Error("book metadata not found");
+  }
+
+  const response = await fetch(meta.dataUrl || "data/book.json");
+  if (!response.ok) {
+    throw new Error("book data not found");
+  }
+
+  const bookData = await response.json();
+  state.activeBookId = meta.id;
+  state.book = normalizeBook({ ...meta, ...bookData, cover: bookData.cover || meta.cover, dataUrl: meta.dataUrl });
+  state.progress = progressForBook(state.activeBookId);
+  state.readingChapterId = state.progress.chapterId || 1;
+  writeStorage(STORAGE_KEYS.selectedBook, state.activeBookId);
 }
 
 function readStorage(key) {
@@ -180,6 +223,42 @@ async function installApp() {
   showToast(state.pwa.installed ? "已安裝到主畫面" : "已取消安裝");
 }
 
+function normalizeBook(book) {
+  const chapters = Array.isArray(book.chapters) ? book.chapters : [];
+  return {
+    ...book,
+    id: book.id || state.activeBookId,
+    cover: book.cover || "assets/cover.png",
+    tags: Array.isArray(book.tags) ? book.tags : [],
+    chapters,
+    totalChapters: Number(book.totalChapters) || chapters.length,
+    totalWords: Number(book.totalWords) || chapters.reduce((sum, chapter) => sum + (Number(chapter.wordCount) || 0), 0)
+  };
+}
+
+function normalizeProgress(progress) {
+  return {
+    chapterId: Number(progress?.chapterId) || 1,
+    ratio: clamp(Number(progress?.ratio) || 0, 0, 1)
+  };
+}
+
+function bookMeta(bookId) {
+  return state.books.find((book) => book.id === bookId);
+}
+
+function activeBookMeta() {
+  return bookMeta(state.activeBookId) || state.book;
+}
+
+function progressForBook(bookId) {
+  return normalizeProgress(state.progressByBook[bookId] || { chapterId: 1, ratio: 0 });
+}
+
+function coverForBook(book = state.book) {
+  return book?.cover || "assets/cover.png";
+}
+
 function render() {
   if (!state.book) return;
 
@@ -200,7 +279,7 @@ function buildView() {
 
   const titleMap = {
     home: ["勇者書架", "今日繼續派送"],
-    shelf: ["我的書架", "1 本收藏"],
+    shelf: ["我的書架", `${state.books.length} 本作品`],
     catalog: ["章節目錄", `${state.book.totalChapters} 章完整收錄`],
     profile: ["我的", "閱讀設定與紀錄"]
   };
@@ -243,7 +322,7 @@ function homeView() {
   return `
     <section class="hero">
       <div class="book-hero">
-        <img class="cover" src="assets/cover.png" alt="《勇者派送中》書封">
+        <img class="cover" src="${escapeAttr(coverForBook(book))}" alt="《${escapeAttr(book.title)}》書封">
         <div>
           <h1 class="book-title">${escapeHtml(book.title)}</h1>
           <p class="author">${escapeHtml(book.author)}</p>
@@ -294,26 +373,34 @@ function homeView() {
 
 function shelfView() {
   const current = currentChapter();
+  const bookCards = state.books.map((book) => bookShelfCard(book)).join("");
   return `
-    <article class="shelf-card">
-      <img src="assets/cover.png" alt="《勇者派送中》書封">
-      <div>
-        <h2>${escapeHtml(state.book.title)}</h2>
-        <p>${escapeHtml(current.title)} · 已讀 ${progressPercent()}%</p>
-        <button class="primary-button wide-button" type="button" data-action="continue">${icons.play}<span>繼續閱讀</span></button>
-        <button class="secondary-button wide-button" type="button" data-action="listen-current">${icons.headphones}<span>開始聽書</span></button>
-      </div>
-    </article>
-
     <section class="panel">
       <div class="panel-header">
-        <h2>最近閱讀</h2>
+        <h2>目前閱讀</h2>
         <button class="text-link" type="button" data-action="catalog">查看目錄</button>
       </div>
+      <article class="shelf-card current-book-card">
+        <img src="${escapeAttr(coverForBook(state.book))}" alt="《${escapeAttr(state.book.title)}》書封">
+        <div>
+          <h2>${escapeHtml(state.book.title)}</h2>
+          <p>${escapeHtml(current.title)} · 已讀 ${progressPercent()}%</p>
+          <button class="primary-button wide-button" type="button" data-action="continue">${icons.play}<span>繼續閱讀</span></button>
+          <button class="secondary-button wide-button" type="button" data-action="listen-current">${icons.headphones}<span>開始聽書</span></button>
+        </div>
+      </article>
       <div class="chapter-list">
         ${chapterRow(current)}
         ${chapterRow(nextChapter(current.id) || state.book.chapters[0])}
       </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>作品庫</h2>
+        <span class="panel-count">${state.books.length} 本</span>
+      </div>
+      <div class="book-library">${bookCards}</div>
     </section>
   `;
 }
@@ -543,6 +630,24 @@ function chapterRow(chapter) {
   `;
 }
 
+function bookShelfCard(book) {
+  const progress = progressForBook(book.id);
+  const percent = progressPercentForBook(book, progress);
+  const active = book.id === state.activeBookId ? " active" : "";
+  return `
+    <article class="shelf-card library-book${active}">
+      <img src="${escapeAttr(coverForBook(book))}" alt="《${escapeAttr(book.title)}》書封">
+      <div>
+        <h2>${escapeHtml(book.title)}</h2>
+        <p>${escapeHtml(book.category || book.subtitle || "")} · ${book.totalChapters || 0} 章 · 已讀 ${percent}%</p>
+        <button class="secondary-button wide-button" type="button" data-book-id="${escapeAttr(book.id)}">
+          ${icons.book}<span>${active ? "目前閱讀" : "打開作品"}</span>
+        </button>
+      </div>
+    </article>
+  `;
+}
+
 function themeButton(theme, label) {
   return `<button type="button" class="${state.reader.theme === theme ? "active" : ""}" data-theme="${theme}">${label}</button>`;
 }
@@ -577,6 +682,12 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const id = Number(button.dataset.chapter);
       if (id) openChapter(id);
+    });
+  });
+
+  $app.querySelectorAll("[data-book-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectBook(button.dataset.bookId);
     });
   });
 
@@ -645,7 +756,10 @@ function handleAction(action) {
       startAudio(state.readingChapterId);
       break;
     case "shelf-add":
-      writeStorage(STORAGE_KEYS.shelf, { added: true, at: Date.now() });
+      writeStorage(STORAGE_KEYS.shelf, {
+        ...readStorage(STORAGE_KEYS.shelf),
+        [state.activeBookId]: { added: true, at: Date.now() }
+      });
       showToast("已加入書架");
       break;
     case "install-app":
@@ -693,6 +807,27 @@ function handleAction(action) {
       persistReader();
       render();
       break;
+  }
+}
+
+async function selectBook(bookId, targetView = "home") {
+  if (!bookId || bookId === state.activeBookId) {
+    state.view = targetView;
+    state.settingsOpen = false;
+    render();
+    return;
+  }
+
+  try {
+    stopAudio(false);
+    await loadBook(bookId);
+    state.view = targetView;
+    state.query = "";
+    state.settingsOpen = false;
+    render();
+    showToast("已切換作品");
+  } catch {
+    showToast("作品載入失敗");
   }
 }
 
@@ -1005,7 +1140,11 @@ function restoreReaderScroll() {
 }
 
 function persistProgress() {
-  writeStorage(STORAGE_KEYS.progress, state.progress);
+  state.progressByBook[state.activeBookId] = normalizeProgress(state.progress);
+  writeStorage(STORAGE_KEYS.progressByBook, state.progressByBook);
+  if (state.activeBookId === "brave-delivery") {
+    writeStorage(STORAGE_KEYS.progress, state.progress);
+  }
 }
 
 function persistReader() {
@@ -1013,8 +1152,13 @@ function persistReader() {
 }
 
 function progressPercent() {
-  const chapterPart = (state.progress.chapterId - 1) / state.book.totalChapters;
-  const currentPart = (state.progress.ratio || 0) / state.book.totalChapters;
+  return progressPercentForBook(state.book, state.progress);
+}
+
+function progressPercentForBook(book, progress) {
+  const totalChapters = Math.max(1, Number(book?.totalChapters) || 1);
+  const chapterPart = (progress.chapterId - 1) / totalChapters;
+  const currentPart = (progress.ratio || 0) / totalChapters;
   return Math.round((chapterPart + currentPart) * 100);
 }
 

@@ -16,6 +16,7 @@
 - 字體大小調整
 - 本機閱讀進度保存
 - PWA 安裝與離線閱讀快取
+- 多書庫資料結構
 
 ## 本機預覽
 
@@ -34,3 +35,10 @@ http://localhost:5173/
 ## 部署
 
 這是一個純靜態網站，可直接部署到 GitHub Pages。
+
+## 新增書本
+
+1. 將新書正文 JSON 放到 `data/`，格式可參考 `data/book.json`。
+2. 將封面放到 `assets/`。
+3. 在 `data/books.json` 的 `books` 陣列新增一筆，填入 `id`、`title`、`cover`、`dataUrl` 等欄位。
+4. 發布到 GitHub Pages 後，App 會自動在「作品庫」顯示新書。

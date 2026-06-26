@@ -310,6 +310,12 @@ button {
   font-size: 16px;
 }
 
+.panel-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .text-link {
   color: var(--brand-2);
   background: transparent;
@@ -456,6 +462,20 @@ button {
   border-radius: var(--radius);
   background: var(--surface);
   border: 1px solid var(--line);
+}
+
+.current-book-card {
+  margin-bottom: 12px;
+}
+
+.book-library {
+  display: grid;
+  gap: 10px;
+}
+
+.library-book.active {
+  border-color: rgba(214, 168, 61, 0.72);
+  background: #fffaf0;
 }
 
 .shelf-card img {

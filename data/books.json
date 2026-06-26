@@ -1,0 +1,20 @@
+{
+  "defaultBookId": "brave-delivery",
+  "books": [
+    {
+      "id": "brave-delivery",
+      "title": "勇者派送中",
+      "subtitle": "我都穿越了，為什麼還要送外賣啊！",
+      "author": "林阿斗的配送日志",
+      "category": "玄幻 · 異世大陸",
+      "tags": ["玄幻", "異世大陸", "爆笑冒險", "打工人勇者"],
+      "status": "全書完",
+      "totalChapters": 70,
+      "totalWords": 189437,
+      "updatedAt": "2026-06-26",
+      "cover": "assets/cover.png",
+      "dataUrl": "data/book.json",
+      "synopsis": "外賣員林阿斗加班送炸雞時意外穿越，剛睜眼就綁定異世界的勇者配送平台。別人穿越有聖劍、有女神、有王位，他穿越只有倒計時、差評、信用分。"
+    }
+  ]
+}
