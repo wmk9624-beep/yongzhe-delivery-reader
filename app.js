@@ -278,7 +278,7 @@ function buildView() {
   }
 
   const titleMap = {
-    home: ["勇者書架", "今日繼續派送"],
+    home: ["夜半偷鹹魚", "今日繼續派送"],
     shelf: ["我的書架", `${state.books.length} 本作品`],
     catalog: ["章節目錄", `${state.book.totalChapters} 章完整收錄`],
     profile: ["我的", "閱讀設定與紀錄"]
