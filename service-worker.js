@@ -1,4 +1,4 @@
-const CACHE_NAME = "yongzhe-reader-v5";
+const CACHE_NAME = "yongzhe-reader-v6";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -47,13 +47,23 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (requestUrl.pathname.endsWith("/data/books.json")) {
-    event.respondWith(networkFirst(request, scopedUrl("./data/books.json")));
+  if (isFreshAsset(requestUrl)) {
+    event.respondWith(networkFirst(request, request.url));
     return;
   }
 
   event.respondWith(cacheFirst(request));
 });
+
+function isFreshAsset(url) {
+  return [
+    "/index.html",
+    "/app.js",
+    "/styles.css",
+    "/manifest.json",
+    "/data/books.json"
+  ].some((path) => url.pathname.endsWith(path));
+}
 
 async function networkFirst(request, fallbackUrl) {
   const cache = await caches.open(CACHE_NAME);
