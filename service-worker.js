@@ -1,4 +1,4 @@
-const CACHE_NAME = "yeban-xianyu-reader-v10";
+const CACHE_NAME = "yeban-xianyu-reader-v11";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,9 +8,11 @@ const APP_SHELL = [
   "./data/books.json",
   "./data/book.json",
   "./assets/cover.png",
-  "./assets/favicon.svg",
+  "./assets/favicon-32.png",
   "./assets/icon-192.png",
-  "./assets/icon-512.png"
+  "./assets/icon-512.png",
+  "./assets/apple-touch-icon.png",
+  "./assets/maskable-icon-512.png"
 ];
 
 function scopedUrl(path) {
