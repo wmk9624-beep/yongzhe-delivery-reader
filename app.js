@@ -26,6 +26,7 @@ const state = {
   readingChapterId: 1,
   settingsOpen: false,
   progressByBook: {},
+  bookmarksByBook: {},
   progress: {
     chapterId: 1,
     ratio: 0
@@ -39,6 +40,7 @@ const state = {
     audioVoiceURI: "",
     audioAutoNext: true,
     keepAwake: true,
+    stopAfterChapter: false,
     sleepMinutes: 0
   },
   audio: {
@@ -58,7 +60,8 @@ const STORAGE_KEYS = {
   progressByBook: "brave-delivery-progress-by-book",
   selectedBook: "brave-delivery-selected-book",
   reader: "brave-delivery-reader",
-  shelf: "brave-delivery-shelf"
+  shelf: "brave-delivery-shelf",
+  bookmarks: "brave-delivery-bookmarks"
 };
 
 let speechQueue = [];
@@ -123,11 +126,16 @@ function loadLocalState() {
   const storedProgressByBook = readStorage(STORAGE_KEYS.progressByBook);
   const storedSelectedBook = readStorage(STORAGE_KEYS.selectedBook);
   const storedReader = readStorage(STORAGE_KEYS.reader);
+  const storedBookmarks = readStorage(STORAGE_KEYS.bookmarks);
 
   state.activeBookId = storedSelectedBook || state.activeBookId;
 
   if (storedProgressByBook && typeof storedProgressByBook === "object") {
     state.progressByBook = storedProgressByBook;
+  }
+
+  if (storedBookmarks && typeof storedBookmarks === "object") {
+    state.bookmarksByBook = storedBookmarks;
   }
 
   if (storedProgress && !state.progressByBook["brave-delivery"]) {
@@ -144,7 +152,8 @@ function loadLocalState() {
       audioVoiceURI: storedReader.audioVoiceURI || "",
       audioAutoNext: storedReader.audioAutoNext !== false,
       keepAwake: storedReader.keepAwake !== false,
-      sleepMinutes: [0, 15, 30, 60].includes(Number(storedReader.sleepMinutes)) ? Number(storedReader.sleepMinutes) : 0
+      stopAfterChapter: storedReader.stopAfterChapter === true,
+      sleepMinutes: [0, 15, 30, 45, 60].includes(Number(storedReader.sleepMinutes)) ? Number(storedReader.sleepMinutes) : 0
     };
   }
 }
@@ -345,9 +354,30 @@ function homeView() {
   const book = state.book;
   const current = currentChapter();
   const percent = progressPercent();
-  const chapterPreview = book.chapters.slice(0, 3).map((chapter) => chapterRow(chapter)).join("");
+  const next = nextChapter(current.id);
+  const chapterPreview = listeningPreviewChapters().map((chapter) => chapterRow(chapter)).join("");
 
   return `
+    <button class="listen-search" type="button" data-action="catalog">
+      ${icons.search}<span>搜尋小說 / 章節 / 關鍵劇情</span>
+    </button>
+
+    <section class="continue-listen">
+      <div class="continue-copy">
+        <span class="eyebrow">繼續收聽</span>
+        <h1>${escapeHtml(book.title)}</h1>
+        <p>${escapeHtml(current.title)}</p>
+        <div class="listen-progress-line">
+          <span>已聽 ${percent}%</span>
+          <span>${estimateChapterMinutes(current)} 分鐘本章</span>
+        </div>
+      </div>
+      <button class="continue-play" type="button" data-action="listen-current" aria-label="繼續聽書">
+        ${icons.play}<span>繼續播放</span>
+      </button>
+      <div class="progress-track"><div class="progress-fill" style="width:${percent}%"></div></div>
+    </section>
+
     <section class="hero">
       <div class="book-hero">
         <img class="cover" src="${escapeAttr(coverForBook(book))}" alt="《${escapeAttr(book.title)}》書封">
@@ -366,10 +396,10 @@ function homeView() {
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel quick-listen-panel">
       <div class="progress-block">
         <div class="progress-meta">
-          <span>${escapeHtml(current.title)}</span>
+          <span>${escapeHtml(next ? `下一章：${next.title}` : "已到最新章節")}</span>
           <strong>${percent}%</strong>
         </div>
         <div class="progress-track"><div class="progress-fill" style="width:${percent}%"></div></div>
@@ -383,6 +413,32 @@ function homeView() {
 
     <section class="panel">
       <div class="panel-header">
+        <h2>今日推薦</h2>
+        <button class="text-link" type="button" data-action="catalog">更多</button>
+      </div>
+      <div class="recommend-grid">
+        ${recommendationCard("今晚適合聽", "爆笑異世冒險", "搞笑")}
+        ${recommendationCard("一聽停不下來", "王宮危機與魔物", "聖印")}
+        ${recommendationCard("30 分鐘一章", "通勤剛剛好", "配送")}
+        ${recommendationCard("完結可連播", `${book.totalChapters} 章全收錄`, "完結")}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>我的書架</h2>
+        <button class="text-link" type="button" data-action="shelf">打開</button>
+      </div>
+      <div class="library-shortcuts">
+        <button type="button" data-action="shelf"><strong>${shelfCount()}</strong><span>收藏中</span></button>
+        <button type="button" data-action="catalog"><strong>${book.totalChapters}</strong><span>已離線</span></button>
+        <button type="button" data-action="continue"><strong>${current.id}</strong><span>最近聽過</span></button>
+        <button type="button" data-action="catalog"><strong>${book.status}</strong><span>完結小說</span></button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
         <h2>作品簡介</h2>
         <button class="text-link" type="button" data-action="catalog">全部章節</button>
       </div>
@@ -391,7 +447,7 @@ function homeView() {
 
     <section class="panel">
       <div class="panel-header">
-        <h2>章節預覽</h2>
+        <h2>本週最熱</h2>
         <button class="text-link" type="button" data-action="catalog">目錄</button>
       </div>
       <div class="chapter-list">${chapterPreview}</div>
@@ -402,24 +458,35 @@ function homeView() {
 function shelfView() {
   const current = currentChapter();
   const bookCards = state.books.map((book) => bookShelfCard(book)).join("");
+  const bookmarks = bookmarkedChapters();
   return `
     <section class="panel">
       <div class="panel-header">
-        <h2>目前閱讀</h2>
+        <h2>繼續收聽</h2>
         <button class="text-link" type="button" data-action="catalog">查看目錄</button>
       </div>
       <article class="shelf-card current-book-card">
         <img src="${escapeAttr(coverForBook(state.book))}" alt="《${escapeAttr(state.book.title)}》書封">
         <div>
           <h2>${escapeHtml(state.book.title)}</h2>
-          <p>${escapeHtml(current.title)} · 已讀 ${progressPercent()}%</p>
-          <button class="primary-button wide-button" type="button" data-action="continue">${icons.play}<span>繼續閱讀</span></button>
-          <button class="secondary-button wide-button" type="button" data-action="listen-current">${icons.headphones}<span>開始聽書</span></button>
+          <p>${escapeHtml(current.title)} · 已聽 ${progressPercent()}% · 約 ${estimateChapterMinutes(current)} 分鐘</p>
+          <button class="primary-button wide-button" type="button" data-action="listen-current">${icons.headphones}<span>繼續播放</span></button>
+          <button class="secondary-button wide-button" type="button" data-action="continue">${icons.play}<span>邊聽邊看</span></button>
         </div>
       </article>
       <div class="chapter-list">
         ${chapterRow(current)}
         ${chapterRow(nextChapter(current.id) || state.book.chapters[0])}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>劇情書籤</h2>
+        <span class="panel-count">${bookmarks.length} 個</span>
+      </div>
+      <div class="chapter-list">
+        ${bookmarks.length ? bookmarks.map((chapter) => chapterRow(chapter)).join("") : `<p class="empty">還未收藏章節</p>`}
       </div>
     </section>
 
@@ -438,6 +505,18 @@ function catalogView() {
   return `
     <div class="search-box">
       <input type="search" placeholder="搜尋章名，例如：聖印、魔王、五星" value="${escapeAttr(state.query)}" data-input="chapter-search" aria-label="搜尋章節">
+    </div>
+    <div class="category-strip">
+      ${categoryButton("", "全部")}
+      ${categoryButton("搞笑", "搞笑")}
+      ${categoryButton("聖印", "奇幻")}
+      ${categoryButton("王宮", "王宮")}
+      ${categoryButton("配送", "打工人")}
+      ${categoryButton("魔王", "魔王")}
+    </div>
+    <div class="catalog-summary">
+      <strong>${chapters.length}</strong><span>個章節結果</span>
+      <strong>${progressPercent()}%</strong><span>已聽進度</span>
     </div>
     <div class="chapter-list">
       ${chapters.length ? chapters.map((chapter) => chapterRow(chapter)).join("") : `<p class="empty">沒有找到相關章節</p>`}
@@ -527,7 +606,9 @@ function profileView() {
           ${sleepButton(0, "關")}
           ${sleepButton(15, "15")}
           ${sleepButton(30, "30")}
+          ${sleepButton(45, "45")}
           ${sleepButton(60, "60")}
+          ${sleepChapterButton()}
         </div>
       </div>
     </section>
@@ -590,17 +671,30 @@ function audioDock(chapter) {
   const mainIcon = active && !paused ? icons.pause : icons.headphones;
   const mainLabel = !supported ? "不支援聽書" : active ? (paused ? "繼續播放" : "暫停") : "朗讀本章";
   const status = !supported ? "瀏覽器未支援" : active ? (paused ? "已暫停" : "朗讀中") : "聽書模式";
+  const prev = previousChapter(chapter.id);
+  const next = nextChapter(chapter.id);
+  const bookmarked = isChapterBookmarked(chapter.id);
 
   return `
     <div class="audio-dock ${active ? "active" : ""}">
-      <button class="audio-main" type="button" data-action="${mainAction}" ${supported ? "" : "disabled"} aria-label="${mainLabel}">
-        ${mainIcon}<span>${mainLabel}</span>
-      </button>
       <div class="audio-meta">
         <strong>${status}</strong>
         <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${escapeHtml(audioModeLabel())} · ${escapeHtml(wakeLockStatusLabel())} · ${state.reader.audioRate.toFixed(1)}x · ${sleepStatusLabel()}</span>
       </div>
-      <button class="audio-stop" type="button" data-action="audio-stop" ${active ? "" : "disabled"} aria-label="停止朗讀">${icons.stop}</button>
+      <div class="audio-controls">
+        <button type="button" data-action="audio-prev-chapter" ${prev ? "" : "disabled"} aria-label="上一章">${icons.back}</button>
+        <button type="button" data-action="audio-rewind" ${active ? "" : "disabled"} aria-label="倒退 15 秒"><span>15</span></button>
+        <button class="audio-main" type="button" data-action="${mainAction}" ${supported ? "" : "disabled"} aria-label="${mainLabel}">
+          ${mainIcon}<span>${mainLabel}</span>
+        </button>
+        <button type="button" data-action="audio-forward" ${active ? "" : "disabled"} aria-label="快進 15 秒"><span>15</span></button>
+        <button type="button" data-action="audio-next-chapter" ${next ? "" : "disabled"} aria-label="下一章">${icons.back}</button>
+      </div>
+      <div class="audio-extra">
+        <button type="button" data-action="toggle-bookmark" class="${bookmarked ? "active" : ""}">${icons.bookmark}<span>${bookmarked ? "已收藏" : "收藏本章"}</span></button>
+        <button type="button" data-action="sleep-chapter-end" class="${state.reader.stopAfterChapter ? "active" : ""}"><span>${state.reader.stopAfterChapter ? "本章後停" : "本章停止"}</span></button>
+        <button type="button" data-action="audio-stop" ${active ? "" : "disabled"}>${icons.stop}<span>停止</span></button>
+      </div>
     </div>
   `;
 }
@@ -670,7 +764,9 @@ function settingsSheet() {
           ${sleepButton(0, "關")}
           ${sleepButton(15, "15")}
           ${sleepButton(30, "30")}
+          ${sleepButton(45, "45")}
           ${sleepButton(60, "60")}
+          ${sleepChapterButton()}
         </div>
       </div>
       <button class="primary-button wide-button" type="button" data-action="toggle-settings">完成</button>
@@ -699,11 +795,12 @@ function tabbar() {
 
 function chapterRow(chapter) {
   const active = chapter.id === state.progress.chapterId ? " active" : "";
+  const bookmarked = isChapterBookmarked(chapter.id);
   return `
     <button class="chapter-row${active}" type="button" data-chapter="${chapter.id}">
       <span>
-        <strong>${escapeHtml(chapter.title)}</strong>
-        <span>${formatWords(chapter.wordCount)}</span>
+        <strong>${bookmarked ? "★ " : ""}${escapeHtml(chapter.title)}</strong>
+        <span>${formatWords(chapter.wordCount)} · 約 ${estimateChapterMinutes(chapter)} 分鐘</span>
       </span>
       <span class="badge">${chapter.id}/${state.book.totalChapters}</span>
     </button>
@@ -726,6 +823,20 @@ function bookShelfCard(book) {
       </div>
     </article>
   `;
+}
+
+function recommendationCard(label, title, query) {
+  return `
+    <button class="recommend-card" type="button" data-query="${escapeAttr(query)}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(title)}</strong>
+    </button>
+  `;
+}
+
+function categoryButton(query, label) {
+  const active = state.query === query ? " active" : "";
+  return `<button class="${active}" type="button" data-query="${escapeAttr(query)}">${escapeHtml(label)}</button>`;
 }
 
 function themeButton(theme, label) {
@@ -775,8 +886,12 @@ function keepAwakeButton(value, label) {
 }
 
 function sleepButton(minutes, label) {
-  const active = state.reader.sleepMinutes === minutes ? "active" : "";
+  const active = !state.reader.stopAfterChapter && state.reader.sleepMinutes === minutes ? "active" : "";
   return `<button type="button" class="${active}" data-sleep-minutes="${minutes}">${label}</button>`;
+}
+
+function sleepChapterButton() {
+  return `<button type="button" class="${state.reader.stopAfterChapter ? "active" : ""}" data-action="sleep-chapter-end">本章</button>`;
 }
 
 function toastHost() {
@@ -809,15 +924,31 @@ function bindEvents() {
     });
   });
 
+  $app.querySelectorAll("[data-query]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.query = button.dataset.query || "";
+      state.view = "catalog";
+      state.settingsOpen = false;
+      render();
+    });
+  });
+
   const search = $app.querySelector("[data-input='chapter-search']");
   if (search) {
     search.addEventListener("input", () => {
       state.query = search.value.trim();
       const list = $app.querySelector(".chapter-list");
       const chapters = filteredChapters();
+      const summary = $app.querySelector(".catalog-summary");
       list.innerHTML = chapters.length
         ? chapters.map((chapter) => chapterRow(chapter)).join("")
         : `<p class="empty">沒有找到相關章節</p>`;
+      if (summary) {
+        summary.innerHTML = `<strong>${chapters.length}</strong><span>個章節結果</span><strong>${progressPercent()}%</strong><span>已聽進度</span>`;
+      }
+      $app.querySelectorAll(".category-strip button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.query === state.query);
+      });
       list.querySelectorAll("[data-chapter]").forEach((button) => {
         button.addEventListener("click", () => openChapter(Number(button.dataset.chapter)));
       });
@@ -896,6 +1027,11 @@ function handleAction(action) {
       state.settingsOpen = false;
       render();
       break;
+    case "shelf":
+      state.view = "shelf";
+      state.settingsOpen = false;
+      render();
+      break;
     case "continue":
       openChapter(state.progress.chapterId || 1, true);
       break;
@@ -930,6 +1066,24 @@ function handleAction(action) {
       break;
     case "audio-stop":
       stopAudio();
+      break;
+    case "audio-prev-chapter":
+      startAdjacentAudio(-1);
+      break;
+    case "audio-next-chapter":
+      startAdjacentAudio(1);
+      break;
+    case "audio-rewind":
+      skipSpeechSegments(-2);
+      break;
+    case "audio-forward":
+      skipSpeechSegments(2);
+      break;
+    case "toggle-bookmark":
+      toggleBookmark(state.readingChapterId);
+      break;
+    case "sleep-chapter-end":
+      setStopAfterChapter(!state.reader.stopAfterChapter);
       break;
     case "toggle-settings":
       state.settingsOpen = !state.settingsOpen;
@@ -1176,6 +1330,29 @@ function resumeAudio() {
   render();
 }
 
+function startAdjacentAudio(direction) {
+  const chapterId = state.audio.chapterId || state.readingChapterId || state.progress.chapterId || 1;
+  const chapter = direction < 0 ? previousChapter(chapterId) : nextChapter(chapterId);
+  if (!chapter) return;
+
+  openChapter(chapter.id);
+  startAudio(chapter.id);
+}
+
+function skipSpeechSegments(offset) {
+  if (!state.audio.active || state.audio.paused || !audioSupported() || !speechQueue.length) return;
+
+  speechIndex = clamp(speechIndex + offset, 0, Math.max(0, speechQueue.length - 1));
+  window.speechSynthesis.cancel();
+  activeUtterance = null;
+  window.setTimeout(() => {
+    if (state.audio.active && !state.audio.paused) {
+      speakNextChunk();
+      render();
+    }
+  }, 80);
+}
+
 function stopAudio(shouldRender = true, options = {}) {
   if (audioSupported()) {
     window.speechSynthesis.cancel();
@@ -1202,7 +1379,8 @@ function stopAudio(shouldRender = true, options = {}) {
 
 function finishAudio() {
   const finishedChapterId = state.audio.chapterId;
-  const followingChapter = state.reader.audioAutoNext ? nextChapter(finishedChapterId) : null;
+  const shouldStopAfterChapter = state.reader.stopAfterChapter;
+  const followingChapter = !shouldStopAfterChapter && state.reader.audioAutoNext ? nextChapter(finishedChapterId) : null;
 
   speechQueue = [];
   speechIndex = 0;
@@ -1212,6 +1390,11 @@ function finishAudio() {
     paused: false,
     chapterId: null
   };
+
+  if (shouldStopAfterChapter) {
+    state.reader.stopAfterChapter = false;
+    persistReader();
+  }
 
   if (followingChapter && !sleepTimerExpired()) {
     state.progress = { chapterId: followingChapter.id, ratio: 0 };
@@ -1229,12 +1412,13 @@ function finishAudio() {
   updateMediaSession();
   clearSleepTimer(false);
   render();
-  showToast(followingChapter ? "睡眠定時已停止朗讀" : "本章朗讀完畢");
+  showToast(shouldStopAfterChapter ? "已播完本章並停止" : followingChapter ? "睡眠定時已停止朗讀" : "本章朗讀完畢");
 }
 
 function setSleepTimer(minutes) {
-  const allowedMinutes = [0, 15, 30, 60].includes(minutes) ? minutes : 0;
+  const allowedMinutes = [0, 15, 30, 45, 60].includes(minutes) ? minutes : 0;
   state.reader.sleepMinutes = allowedMinutes;
+  state.reader.stopAfterChapter = false;
   persistReader();
   clearSleepTimer();
 
@@ -1245,6 +1429,17 @@ function setSleepTimer(minutes) {
 
   render();
   showToast(allowedMinutes ? `已設定 ${allowedMinutes} 分鐘後停止` : "已關閉睡眠定時");
+}
+
+function setStopAfterChapter(enabled) {
+  state.reader.stopAfterChapter = Boolean(enabled);
+  if (enabled) {
+    state.reader.sleepMinutes = 0;
+    clearSleepTimer();
+  }
+  persistReader();
+  render();
+  showToast(enabled ? "會在本章播完後停止" : "已關閉本章停止");
 }
 
 function ensureSleepTimer() {
@@ -1287,6 +1482,8 @@ function sleepTimerExpired() {
 }
 
 function sleepStatusLabel() {
+  if (state.reader.stopAfterChapter) return "本章後停";
+
   if (sleepEndsAt) {
     const remaining = Math.max(1, Math.ceil((sleepEndsAt - Date.now()) / 60000));
     return `${remaining} 分鐘後停`;
@@ -1471,6 +1668,25 @@ function selectedVoice() {
   return cachedVoices.find((voice) => voice.voiceURI === state.reader.audioVoiceURI) || null;
 }
 
+function listeningPreviewChapters() {
+  const current = currentChapter();
+  const candidates = [
+    current,
+    nextChapter(current.id),
+    state.book.chapters.find((chapter) => /聖印|魔王|王宮|配送|五星/.test(chapter.title + chapter.content))
+  ].filter(Boolean);
+  return uniqueChapters(candidates).slice(0, 3);
+}
+
+function uniqueChapters(chapters) {
+  const seen = new Set();
+  return chapters.filter((chapter) => {
+    if (seen.has(chapter.id)) return false;
+    seen.add(chapter.id);
+    return true;
+  });
+}
+
 function currentChapter() {
   return state.book.chapters.find((chapter) => chapter.id === state.progress.chapterId) || state.book.chapters[0];
 }
@@ -1485,6 +1701,41 @@ function previousChapter(id) {
 
 function nextChapter(id) {
   return state.book.chapters.find((chapter) => chapter.id === id + 1);
+}
+
+function bookmarkedChapters() {
+  const ids = bookmarkIds();
+  return ids
+    .map((id) => state.book.chapters.find((chapter) => chapter.id === id))
+    .filter(Boolean);
+}
+
+function bookmarkIds() {
+  return Array.isArray(state.bookmarksByBook[state.activeBookId]) ? state.bookmarksByBook[state.activeBookId] : [];
+}
+
+function isChapterBookmarked(chapterId) {
+  return bookmarkIds().includes(chapterId);
+}
+
+function toggleBookmark(chapterId) {
+  const id = Number(chapterId || state.readingChapterId || state.progress.chapterId || 1);
+  const ids = bookmarkIds();
+  const exists = ids.includes(id);
+  state.bookmarksByBook[state.activeBookId] = exists ? ids.filter((item) => item !== id) : [...ids, id].sort((a, b) => a - b);
+  persistBookmarks();
+  render();
+  showToast(exists ? "已移除章節書籤" : "已收藏本章");
+}
+
+function shelfCount() {
+  const shelf = readStorage(STORAGE_KEYS.shelf) || {};
+  return Object.keys(shelf).length || state.books.length;
+}
+
+function estimateChapterMinutes(chapter) {
+  const words = Math.max(1, Number(chapter?.wordCount) || 2600);
+  return Math.max(1, Math.round(words / 420));
 }
 
 function filteredChapters() {
@@ -1525,6 +1776,10 @@ function persistProgress() {
 
 function persistReader() {
   writeStorage(STORAGE_KEYS.reader, state.reader);
+}
+
+function persistBookmarks() {
+  writeStorage(STORAGE_KEYS.bookmarks, state.bookmarksByBook);
 }
 
 function progressPercent() {
