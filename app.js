@@ -327,7 +327,7 @@ function buildView() {
   }
 
   const titleMap = {
-    home: ["夜半偷鹹魚", "今日繼續派送"],
+    home: ["半夜偷咸鱼", "今晚繼續聽書"],
     shelf: ["我的書架", `${state.books.length} 本作品`],
     catalog: ["章節目錄", `${state.book.totalChapters} 章完整收錄`],
     profile: ["我的", "閱讀設定與紀錄"]
@@ -1281,8 +1281,8 @@ function updateMediaSession(chapter = currentAudioChapter()) {
   if (chapter && "MediaMetadata" in window) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: chapter.title,
-      artist: state.book?.title || "夜半偷鹹魚",
-      album: "夜半偷鹹魚"
+      artist: state.book?.title || "半夜偷咸鱼",
+      album: "半夜偷咸鱼"
     });
   }
 
