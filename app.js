@@ -1,4 +1,5 @@
 const $app = document.querySelector("#app");
+const APP_VERSION = "myth-v1";
 
 const icons = {
   back: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>`,
@@ -34,9 +35,9 @@ const state = {
   reader: {
     fontSize: 18,
     theme: "paper",
-    audioRate: 1,
+    audioRate: 0.95,
     audioPitch: 1,
-    audioStyle: "emotive",
+    audioStyle: "story",
     audioVoiceURI: "",
     audioAutoNext: true,
     keepAwake: true,
@@ -146,9 +147,9 @@ function loadLocalState() {
     state.reader = {
       fontSize: clamp(Number(storedReader.fontSize) || 18, 15, 24),
       theme: storedReader.theme || "paper",
-      audioRate: clamp(Number(storedReader.audioRate) || 1, 0.7, 1.4),
+      audioRate: clamp(Number(storedReader.audioRate) || 0.95, 0.7, 1.4),
       audioPitch: clamp(Number(storedReader.audioPitch) || 1, 0.8, 1.2),
-      audioStyle: storedReader.audioStyle === "plain" ? "plain" : "emotive",
+      audioStyle: normalizeAudioStyle(storedReader.audioStyle),
       audioVoiceURI: storedReader.audioVoiceURI || "",
       audioAutoNext: storedReader.audioAutoNext !== false,
       keepAwake: storedReader.keepAwake !== false,
@@ -159,7 +160,7 @@ function loadLocalState() {
 }
 
 async function loadLibrary() {
-  const response = await fetch("data/books.json");
+  const response = await fetch(`data/books.json?v=${APP_VERSION}`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("book library not found");
   }
@@ -182,7 +183,7 @@ async function loadBook(bookId) {
     throw new Error("book metadata not found");
   }
 
-  const response = await fetch(meta.dataUrl || "data/book.json");
+  const response = await fetch(withVersion(meta.dataUrl || "data/book.json"), { cache: "no-store" });
   if (!response.ok) {
     throw new Error("book data not found");
   }
@@ -202,6 +203,12 @@ function readStorage(key) {
   } catch {
     return null;
   }
+}
+
+function normalizeAudioStyle(style) {
+  if (style === "plain" || style === "story" || style === "drama") return style;
+  if (style === "emotive") return "story";
+  return "story";
 }
 
 function writeStorage(key, value) {
@@ -294,6 +301,11 @@ function progressForBook(bookId) {
 
 function coverForBook(book = state.book) {
   return book?.cover || "assets/cover.png";
+}
+
+function withVersion(url) {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}v=${APP_VERSION}`;
 }
 
 function render() {
@@ -571,7 +583,8 @@ function profileView() {
         <span>朗讀</span>
         <div class="segmented">
           ${audioStyleButton("plain", "標準")}
-          ${audioStyleButton("emotive", "感情")}
+          ${audioStyleButton("story", "聽書")}
+          ${audioStyleButton("drama", "戲劇")}
         </div>
       </div>
       <div class="setting-row">
@@ -729,7 +742,8 @@ function settingsSheet() {
         <span>朗讀</span>
         <div class="segmented">
           ${audioStyleButton("plain", "標準")}
-          ${audioStyleButton("emotive", "感情")}
+          ${audioStyleButton("story", "聽書")}
+          ${audioStyleButton("drama", "戲劇")}
         </div>
       </div>
       <div class="setting-row">
@@ -865,16 +879,20 @@ function voiceOptions() {
   if (!audioSupported()) return [];
   cachedVoices = window.speechSynthesis.getVoices();
   return cachedVoices
-    .filter((voice) => /^zh/i.test(voice.lang) || /Chinese|Cantonese|Mandarin|中文|粵|台|臺|香港|普通話/i.test(voice.name))
+    .filter((voice) => /^zh/i.test(voice.lang) || /Chinese|Cantonese|Mandarin|中文|粵|台|臺|香港|普通話|Natural|Neural|Xiaoxiao|Xiaoyi|Yunxi|Yunjian|Yunyang/i.test(voice.name))
     .sort((a, b) => voiceRank(a) - voiceRank(b) || a.name.localeCompare(b.name));
 }
 
 function voiceRank(voice) {
-  if (/zh-(HK|MO)/i.test(voice.lang) || /Cantonese|粵|香港/i.test(voice.name)) return 0;
-  if (/zh-TW/i.test(voice.lang) || /台|臺/i.test(voice.name)) return 1;
-  if (/zh-CN/i.test(voice.lang) || /Mandarin|普通話/i.test(voice.name)) return 2;
-  if (/^zh/i.test(voice.lang)) return 3;
-  return 4;
+  const name = voice.name || "";
+  const lang = voice.lang || "";
+  if (/zh-(HK|TW|MO)/i.test(lang) && /Natural|Neural|Online/i.test(name)) return 0;
+  if (/zh-(HK|MO)/i.test(lang) || /Cantonese|粵|香港/i.test(name)) return 1;
+  if (/zh-TW/i.test(lang) || /台|臺/i.test(name)) return 2;
+  if (/zh-CN/i.test(lang) && /Natural|Neural|Online|Xiaoxiao|Xiaoyi|Yunxi|Yunjian|Yunyang/i.test(name)) return 3;
+  if (/zh-CN/i.test(lang) || /Mandarin|普通話/i.test(name)) return 4;
+  if (/^zh/i.test(lang)) return 5;
+  return 6;
 }
 
 function autoNextButton(value, label) {
@@ -965,7 +983,7 @@ function bindEvents() {
 
   $app.querySelectorAll("[data-audio-style]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.reader.audioStyle = button.dataset.audioStyle === "plain" ? "plain" : "emotive";
+      state.reader.audioStyle = normalizeAudioStyle(button.dataset.audioStyle);
       persistReader();
       render();
     });
@@ -1493,7 +1511,12 @@ function sleepStatusLabel() {
 }
 
 function audioModeLabel() {
-  const style = state.reader.audioStyle === "emotive" ? "感情" : "標準";
+  const labels = {
+    plain: "標準",
+    story: "聽書",
+    drama: "戲劇"
+  };
+  const style = labels[normalizeAudioStyle(state.reader.audioStyle)];
   const voice = selectedVoice();
   return voice ? `${style} · ${voice.name}` : style;
 }
@@ -1507,7 +1530,7 @@ function speakNextChunk() {
   }
 
   const segment = speechQueue[speechIndex];
-  const prosody = segmentProsody(segment.text, segment.type);
+  const prosody = segmentProsody(segment);
   const utterance = new SpeechSynthesisUtterance(segment.text);
   const voice = preferredVoice();
   if (voice) {
@@ -1552,8 +1575,9 @@ function buildSpeechQueue(chapter) {
     .filter(Boolean)
     .forEach((paragraph) => {
       const type = classifySpeechText(paragraph);
-      splitSpeechText(paragraph).forEach((sentence) => {
-        pushSpeechSegment(segments, sentence, type);
+      const sentences = splitSpeechText(paragraph);
+      sentences.forEach((sentence, index) => {
+        pushSpeechSegment(segments, sentence, type, { paragraphEnd: index === sentences.length - 1 });
       });
     });
 
@@ -1565,22 +1589,37 @@ function splitSpeechText(text) {
     .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .match(/[^。！？!?；;：:]+[。！？!?；;：:]?/g);
+    .match(/[^。！？!?；;]+[。！？!?；;]?|[^，,、。！？!?；;]{22,}[，,、]/g);
 
   return sentences?.length ? sentences.map((sentence) => sentence.trim()).filter(Boolean) : [text.trim()].filter(Boolean);
 }
 
-function pushSpeechSegment(segments, text, type) {
-  const clean = text.trim();
+function pushSpeechSegment(segments, text, type, options = {}) {
+  const clean = normalizeSpokenText(text, type);
   if (!clean) return;
 
-  const maxLength = type === "dialogue" ? 120 : 155;
+  const maxLength = type === "dialogue" ? 96 : 132;
   for (let index = 0; index < clean.length; index += maxLength) {
     const part = clean.slice(index, index + maxLength).trim();
     if (part) {
-      segments.push(createSpeechSegment(part, type));
+      const isLastPart = index + maxLength >= clean.length;
+      segments.push(createSpeechSegment(part, type, options.paragraphEnd && isLastPart));
     }
   }
+}
+
+function normalizeSpokenText(text, type) {
+  const clean = String(text || "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (type === "system") {
+    return clean.replace(/^【\s*/, "").replace(/\s*】$/, "");
+  }
+
+  return clean;
 }
 
 function classifySpeechText(text) {
@@ -1591,64 +1630,79 @@ function classifySpeechText(text) {
   return "narration";
 }
 
-function createSpeechSegment(text, type) {
+function createSpeechSegment(text, type, paragraphEnd = false) {
   return {
     text,
-    type
+    type,
+    paragraphEnd
   };
 }
 
-function segmentProsody(text, type) {
+function segmentProsody(segment) {
+  const text = segment.text;
+  const type = segment.type;
+  const style = normalizeAudioStyle(state.reader.audioStyle);
   const baseRate = state.reader.audioRate;
   const basePitch = state.reader.audioPitch;
 
-  if (state.reader.audioStyle !== "emotive") {
+  if (style === "plain") {
     return {
       rate: baseRate,
       pitch: basePitch,
-      pauseAfter: punctuationPause(text, 120)
+      pauseAfter: punctuationPause(text, 140, segment.paragraphEnd)
     };
   }
 
   const exclaim = /[！!]/.test(text);
   const question = /[？?]/.test(text);
+  const dramatic = style === "drama";
 
   if (type === "title") {
-    return { rate: clamp(baseRate * 0.9, 0.7, 1.4), pitch: clamp(basePitch + 0.02, 0.8, 1.2), pauseAfter: 720 };
+    return {
+      rate: clamp(baseRate * (dramatic ? 0.84 : 0.88), 0.7, 1.4),
+      pitch: clamp(basePitch + 0.02, 0.8, 1.2),
+      pauseAfter: 900
+    };
   }
 
   if (type === "system") {
-    return { rate: clamp(baseRate * 0.96, 0.7, 1.4), pitch: clamp(basePitch - 0.05, 0.8, 1.2), pauseAfter: punctuationPause(text, 360) };
+    return {
+      rate: clamp(baseRate * (dramatic ? 0.9 : 0.92), 0.7, 1.4),
+      pitch: clamp(basePitch - (dramatic ? 0.08 : 0.05), 0.8, 1.2),
+      pauseAfter: punctuationPause(text, dramatic ? 520 : 420, segment.paragraphEnd)
+    };
   }
 
   if (type === "dialogue") {
     return {
-      rate: clamp(baseRate * (exclaim ? 1.08 : 1.02), 0.7, 1.4),
-      pitch: clamp(basePitch + (question ? 0.07 : 0.04), 0.8, 1.2),
-      pauseAfter: punctuationPause(text, exclaim ? 260 : 220)
+      rate: clamp(baseRate * (dramatic ? (exclaim ? 1.08 : 1.02) : 1), 0.7, 1.4),
+      pitch: clamp(basePitch + (dramatic ? (question ? 0.08 : 0.05) : 0.03), 0.8, 1.2),
+      pauseAfter: punctuationPause(text, dramatic && exclaim ? 320 : 260, segment.paragraphEnd)
     };
   }
 
   if (type === "emphasis") {
     return {
-      rate: clamp(baseRate * (exclaim ? 1.06 : 0.98), 0.7, 1.4),
-      pitch: clamp(basePitch + (exclaim ? 0.08 : 0.03), 0.8, 1.2),
-      pauseAfter: punctuationPause(text, 340)
+      rate: clamp(baseRate * (dramatic ? (exclaim ? 1.04 : 0.96) : 0.97), 0.7, 1.4),
+      pitch: clamp(basePitch + (dramatic && exclaim ? 0.08 : 0.03), 0.8, 1.2),
+      pauseAfter: punctuationPause(text, dramatic ? 420 : 340, segment.paragraphEnd)
     };
   }
 
   return {
-    rate: clamp(baseRate * 0.98, 0.7, 1.4),
+    rate: clamp(baseRate * (dramatic ? 0.94 : 0.96), 0.7, 1.4),
     pitch: basePitch,
-    pauseAfter: punctuationPause(text, 240)
+    pauseAfter: punctuationPause(text, dramatic ? 300 : 260, segment.paragraphEnd)
   };
 }
 
-function punctuationPause(text, basePause) {
-  if (/[。！？!?]$/.test(text)) return basePause + 180;
-  if (/[；;：:]$/.test(text)) return basePause + 120;
-  if (/[，,、]$/.test(text)) return basePause + 60;
-  return basePause;
+function punctuationPause(text, basePause, paragraphEnd = false) {
+  let pause = basePause;
+  if (/[。！？!?]$/.test(text)) pause += 240;
+  if (/[；;：:]$/.test(text)) pause += 150;
+  if (/[，,、]$/.test(text)) pause += 80;
+  if (paragraphEnd) pause += 260;
+  return pause;
 }
 
 function preferredVoice() {
@@ -1656,8 +1710,10 @@ function preferredVoice() {
 
   cachedVoices = window.speechSynthesis.getVoices();
   return selectedVoice()
+    || cachedVoices.find((voice) => /^zh-(HK|TW|MO)$/i.test(voice.lang) && /Natural|Neural|Online/i.test(voice.name))
     || cachedVoices.find((voice) => /^zh-(HK|TW|MO)$/i.test(voice.lang))
     || cachedVoices.find((voice) => /^zh-Hant/i.test(voice.lang))
+    || cachedVoices.find((voice) => /^zh-CN$/i.test(voice.lang) && /Natural|Neural|Online|Xiaoxiao|Xiaoyi|Yunxi|Yunjian|Yunyang/i.test(voice.name))
     || cachedVoices.find((voice) => /^zh/i.test(voice.lang))
     || null;
 }

@@ -1,6 +1,21 @@
 {
-  "defaultBookId": "brave-delivery",
+  "defaultBookId": "myth-cultivation",
   "books": [
+    {
+      "id": "myth-cultivation",
+      "title": "神話培育流",
+      "subtitle": "天下沒有神獸，只有被培育成神的生命",
+      "author": "林淵培育筆記",
+      "category": "玄幻 · 修仙 · 異寵培育",
+      "tags": ["玄幻", "修仙", "異寵養成", "神話培育", "群像爽文"],
+      "status": "第一卷完 · 二輪精修",
+      "totalChapters": 50,
+      "totalWords": 76476,
+      "updatedAt": "2026-06-27",
+      "cover": "assets/cover.png",
+      "dataUrl": "data/myth-cultivation.json",
+      "synopsis": "萬獸宗少年林淵在啟靈日只測出一寸靈光，卻契約了一隻被挑剩下、後腿受傷的灰耳靈犬。所有人都說凡種下品沒有未來，只有林淵看見牠的嗅覺、守護意志與不肯服輸的生命火光。"
+    },
     {
       "id": "brave-delivery",
       "title": "勇者派送中",
