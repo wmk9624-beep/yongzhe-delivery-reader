@@ -1,4 +1,4 @@
-const CACHE_NAME = "yeban-xianyu-reader-v8";
+const CACHE_NAME = "yeban-xianyu-reader-v9";
 const APP_SHELL = [
   "./",
   "./index.html",

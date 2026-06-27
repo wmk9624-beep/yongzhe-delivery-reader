@@ -38,6 +38,7 @@ const state = {
     audioStyle: "emotive",
     audioVoiceURI: "",
     audioAutoNext: true,
+    keepAwake: true,
     sleepMinutes: 0
   },
   audio: {
@@ -67,10 +68,13 @@ let cachedVoices = [];
 let sleepTimerId = null;
 let sleepEndsAt = null;
 let installPromptEvent = null;
+let wakeLockSentinel = null;
+let wakeLockWarningShown = false;
 
 init();
 setupPwaInstall();
 registerServiceWorker();
+setupMediaSessionHandlers();
 
 if (audioSupported()) {
   cachedVoices = window.speechSynthesis.getVoices();
@@ -80,8 +84,22 @@ if (audioSupported()) {
       render();
     }
   });
-  window.addEventListener("pagehide", () => stopAudio(false));
+  window.addEventListener("pagehide", () => {
+    releaseWakeLock();
+    updateMediaSession();
+  });
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    if (state.audio.active && !state.audio.paused) {
+      requestWakeLock();
+      updateMediaSession();
+    }
+  } else {
+    releaseWakeLock();
+  }
+});
 
 async function init() {
   loadLocalState();
@@ -125,6 +143,7 @@ function loadLocalState() {
       audioStyle: storedReader.audioStyle === "plain" ? "plain" : "emotive",
       audioVoiceURI: storedReader.audioVoiceURI || "",
       audioAutoNext: storedReader.audioAutoNext !== false,
+      keepAwake: storedReader.keepAwake !== false,
       sleepMinutes: [0, 15, 30, 60].includes(Number(storedReader.sleepMinutes)) ? Number(storedReader.sleepMinutes) : 0
     };
   }
@@ -496,6 +515,13 @@ function profileView() {
         </div>
       </div>
       <div class="setting-row">
+        <span>防黑屏</span>
+        <div class="segmented">
+          ${keepAwakeButton(true, "開")}
+          ${keepAwakeButton(false, "關")}
+        </div>
+      </div>
+      <div class="setting-row">
         <span>定時</span>
         <div class="timer-buttons">
           ${sleepButton(0, "關")}
@@ -572,7 +598,7 @@ function audioDock(chapter) {
       </button>
       <div class="audio-meta">
         <strong>${status}</strong>
-        <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${escapeHtml(audioModeLabel())} · ${state.reader.audioRate.toFixed(1)}x · ${sleepStatusLabel()}</span>
+        <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${escapeHtml(audioModeLabel())} · ${escapeHtml(wakeLockStatusLabel())} · ${state.reader.audioRate.toFixed(1)}x · ${sleepStatusLabel()}</span>
       </div>
       <button class="audio-stop" type="button" data-action="audio-stop" ${active ? "" : "disabled"} aria-label="停止朗讀">${icons.stop}</button>
     </div>
@@ -629,6 +655,13 @@ function settingsSheet() {
         <div class="segmented">
           ${autoNextButton(true, "開")}
           ${autoNextButton(false, "關")}
+        </div>
+      </div>
+      <div class="setting-row">
+        <span>防黑屏</span>
+        <div class="segmented">
+          ${keepAwakeButton(true, "開")}
+          ${keepAwakeButton(false, "關")}
         </div>
       </div>
       <div class="setting-row">
@@ -737,6 +770,10 @@ function autoNextButton(value, label) {
   return `<button type="button" class="${state.reader.audioAutoNext === value ? "active" : ""}" data-auto-next="${value}">${label}</button>`;
 }
 
+function keepAwakeButton(value, label) {
+  return `<button type="button" class="${state.reader.keepAwake === value ? "active" : ""}" data-keep-awake="${value}">${label}</button>`;
+}
+
 function sleepButton(minutes, label) {
   const active = state.reader.sleepMinutes === minutes ? "active" : "";
   return `<button type="button" class="${active}" data-sleep-minutes="${minutes}">${label}</button>`;
@@ -816,6 +853,19 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.reader.audioAutoNext = button.dataset.autoNext === "true";
       persistReader();
+      render();
+    });
+  });
+
+  $app.querySelectorAll("[data-keep-awake]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.reader.keepAwake = button.dataset.keepAwake === "true";
+      persistReader();
+      if (state.reader.keepAwake) {
+        requestWakeLock().then(() => render());
+      } else {
+        releaseWakeLock();
+      }
       render();
     });
   });
@@ -963,6 +1013,117 @@ function audioSupported() {
   return "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 }
 
+function wakeLockSupported() {
+  return "wakeLock" in navigator && window.isSecureContext;
+}
+
+async function requestWakeLock() {
+  if (!state.reader.keepAwake || !state.audio.active || state.audio.paused || document.visibilityState !== "visible") {
+    releaseWakeLock();
+    return false;
+  }
+
+  if (!wakeLockSupported()) {
+    if (!wakeLockWarningShown) {
+      wakeLockWarningShown = true;
+      showToast("這部手機不支援防黑屏，鎖屏後可能暫停");
+    }
+    return false;
+  }
+
+  if (wakeLockSentinel && !wakeLockSentinel.released) {
+    return true;
+  }
+
+  try {
+    wakeLockSentinel = await navigator.wakeLock.request("screen");
+    wakeLockSentinel.addEventListener("release", () => {
+      wakeLockSentinel = null;
+      if (state.audio.active && !state.audio.paused) {
+        render();
+      }
+    });
+    return true;
+  } catch (error) {
+    if (!wakeLockWarningShown) {
+      wakeLockWarningShown = true;
+      showToast("防黑屏未能啟用，請保持頁面在前台");
+    }
+    wakeLockSentinel = null;
+    return false;
+  }
+}
+
+function releaseWakeLock() {
+  if (!wakeLockSentinel) return;
+  const sentinel = wakeLockSentinel;
+  wakeLockSentinel = null;
+  sentinel.release().catch(() => {});
+}
+
+function wakeLockStatusLabel() {
+  if (!state.reader.keepAwake) return "防黑屏關";
+  if (!wakeLockSupported()) return "防黑屏未支援";
+  return wakeLockSentinel ? "防黑屏開" : "防黑屏待命";
+}
+
+function setupMediaSessionHandlers() {
+  if (!("mediaSession" in navigator)) return;
+
+  setMediaActionHandler("play", () => {
+    if (state.audio.active && state.audio.paused) {
+      resumeAudio();
+    } else {
+      startAudio(state.readingChapterId || state.progress.chapterId || 1);
+    }
+  });
+  setMediaActionHandler("pause", pauseAudio);
+  setMediaActionHandler("stop", () => stopAudio());
+  setMediaActionHandler("nexttrack", () => {
+    const next = nextChapter(state.audio.chapterId || state.readingChapterId || state.progress.chapterId);
+    if (next) {
+      openChapter(next.id);
+      startAudio(next.id);
+    }
+  });
+  setMediaActionHandler("previoustrack", () => {
+    const previous = previousChapter(state.audio.chapterId || state.readingChapterId || state.progress.chapterId);
+    if (previous) {
+      openChapter(previous.id);
+      startAudio(previous.id);
+    }
+  });
+}
+
+function setMediaActionHandler(action, handler) {
+  try {
+    navigator.mediaSession.setActionHandler(action, handler);
+  } catch (error) {
+    // Some platforms only support part of the Media Session action list.
+  }
+}
+
+function updateMediaSession(chapter = currentAudioChapter()) {
+  if (!("mediaSession" in navigator)) return;
+
+  if (chapter && "MediaMetadata" in window) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: chapter.title,
+      artist: state.book?.title || "夜半偷鹹魚",
+      album: "夜半偷鹹魚"
+    });
+  }
+
+  navigator.mediaSession.playbackState = state.audio.active
+    ? (state.audio.paused ? "paused" : "playing")
+    : "none";
+}
+
+function currentAudioChapter() {
+  if (!state.book || !state.audio.chapterId) return null;
+  return state.book.chapters.find((item) => item.id === state.audio.chapterId) || null;
+}
+
 function startAudio(chapterId, options = {}) {
   if (!audioSupported()) {
     showToast("這個瀏覽器暫時不支援聽書");
@@ -982,6 +1143,12 @@ function startAudio(chapterId, options = {}) {
   };
 
   ensureSleepTimer();
+  requestWakeLock().then((locked) => {
+    if (locked && state.audio.active && !state.audio.paused) {
+      render();
+    }
+  });
+  updateMediaSession(chapter);
   speakNextChunk();
   render();
 }
@@ -990,6 +1157,8 @@ function pauseAudio() {
   if (!state.audio.active || !audioSupported()) return;
   window.speechSynthesis.pause();
   state.audio.paused = true;
+  releaseWakeLock();
+  updateMediaSession();
   render();
 }
 
@@ -998,6 +1167,12 @@ function resumeAudio() {
   window.speechSynthesis.resume();
   state.audio.paused = false;
   ensureSleepTimer();
+  requestWakeLock().then((locked) => {
+    if (locked && state.audio.active && !state.audio.paused) {
+      render();
+    }
+  });
+  updateMediaSession();
   render();
 }
 
@@ -1009,6 +1184,7 @@ function stopAudio(shouldRender = true, options = {}) {
   if (!options.keepSleepTimer) {
     clearSleepTimer();
   }
+  releaseWakeLock();
   speechQueue = [];
   speechIndex = 0;
   activeUtterance = null;
@@ -1019,6 +1195,7 @@ function stopAudio(shouldRender = true, options = {}) {
   };
 
   if (shouldRender) {
+    updateMediaSession();
     render();
   }
 }
@@ -1048,6 +1225,8 @@ function finishAudio() {
     return;
   }
 
+  releaseWakeLock();
+  updateMediaSession();
   clearSleepTimer(false);
   render();
   showToast(followingChapter ? "睡眠定時已停止朗讀" : "本章朗讀完畢");
