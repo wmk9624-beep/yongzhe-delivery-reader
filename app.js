@@ -1,5 +1,5 @@
 const $app = document.querySelector("#app");
-const APP_VERSION = "yeban-mainland-v1";
+const APP_VERSION = "yeban-mainland-v2";
 
 const icons = {
   back: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>`,
@@ -330,7 +330,8 @@ function buildView() {
   const titleMap = {
     home: ["夜半偷咸鱼", "大陆听书版"],
     shelf: ["我的书架", `${state.books.length} 本作品`],
-    catalog: ["章节目录", `${state.book.totalChapters} 章完整收录`],
+    catalog: ["书本分类", `${state.books.length} 本作品`],
+    chapters: ["章节目录", `${state.book.totalChapters} 章完整收录`],
     profile: ["我的", "阅读设置与记录"]
   };
   const [title, subtitle] = titleMap[state.view] || titleMap.home;
@@ -342,6 +343,7 @@ function buildView() {
         ${state.view === "home" ? homeView() : ""}
         ${state.view === "shelf" ? shelfView() : ""}
         ${state.view === "catalog" ? catalogView() : ""}
+        ${state.view === "chapters" ? chaptersView() : ""}
         ${state.view === "profile" ? profileView() : ""}
       </div>
       ${tabbar()}
@@ -358,7 +360,7 @@ function topbar(title, subtitle) {
         <strong>${escapeHtml(title)}</strong>
         <span>${escapeHtml(subtitle)}</span>
       </div>
-      <button class="icon-button" type="button" data-action="catalog" aria-label="搜索章节">${icons.search}</button>
+      <button class="icon-button" type="button" data-action="catalog" aria-label="搜索书本">${icons.search}</button>
     </header>
   `;
 }
@@ -372,7 +374,7 @@ function homeView() {
 
   return `
     <button class="listen-search" type="button" data-action="catalog">
-      ${icons.search}<span>搜索小说 / 章节 / 关键剧情</span>
+      ${icons.search}<span>搜索书本 / 作者 / 类型</span>
     </button>
 
     <section class="continue-listen">
@@ -430,10 +432,10 @@ function homeView() {
         <button class="text-link" type="button" data-action="catalog">更多</button>
       </div>
       <div class="recommend-grid">
-        ${recommendationCard("今晚适合听", "爆笑异世冒险", "搞笑")}
-        ${recommendationCard("一听停不下来", "王宫危机与魔物", "圣印")}
-        ${recommendationCard("30 分钟一章", "通勤刚刚好", "配送")}
-        ${recommendationCard("完结可连播", `${book.totalChapters} 章全收录`, "完结")}
+        ${recommendationCard("今晚适合听", "爆笑异世冒险", "爆笑冒险")}
+        ${recommendationCard("一听停不下来", "玄幻异世", "异世大陆")}
+        ${recommendationCard("30 分钟一章", "通勤刚刚好", "打工人勇者")}
+        ${recommendationCard("完结可连播", `${book.totalChapters} 章全收录`, "全书完")}
       </div>
     </section>
 
@@ -444,16 +446,16 @@ function homeView() {
       </div>
       <div class="library-shortcuts">
         <button type="button" data-action="shelf"><strong>${shelfCount()}</strong><span>收藏中</span></button>
-        <button type="button" data-action="catalog"><strong>${book.totalChapters}</strong><span>已离线</span></button>
+        <button type="button" data-action="chapters"><strong>${book.totalChapters}</strong><span>已离线</span></button>
         <button type="button" data-action="continue"><strong>${current.id}</strong><span>最近听过</span></button>
-        <button type="button" data-action="catalog"><strong>${book.status}</strong><span>完结小说</span></button>
+        <button type="button" data-action="catalog"><strong>${book.status}</strong><span>书本分类</span></button>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-header">
         <h2>作品简介</h2>
-        <button class="text-link" type="button" data-action="catalog">全部章节</button>
+        <button class="text-link" type="button" data-action="chapters">全部章节</button>
       </div>
       <p class="synopsis">${escapeHtml(book.synopsis)}</p>
     </section>
@@ -461,7 +463,7 @@ function homeView() {
     <section class="panel">
       <div class="panel-header">
         <h2>本周最热</h2>
-        <button class="text-link" type="button" data-action="catalog">目录</button>
+        <button class="text-link" type="button" data-action="chapters">目录</button>
       </div>
       <div class="chapter-list">${chapterPreview}</div>
     </section>
@@ -476,7 +478,7 @@ function shelfView() {
     <section class="panel">
       <div class="panel-header">
         <h2>继续收听</h2>
-        <button class="text-link" type="button" data-action="catalog">查看目录</button>
+        <button class="text-link" type="button" data-action="chapters">查看目录</button>
       </div>
       <article class="shelf-card current-book-card">
         <img src="${escapeAttr(coverForBook(state.book))}" alt="《${escapeAttr(state.book.title)}》书封">
@@ -514,18 +516,39 @@ function shelfView() {
 }
 
 function catalogView() {
+  const books = filteredBooks();
+  const categories = bookCategories();
+  return `
+    <div class="search-box">
+      <input type="search" placeholder="搜索书名、作者、类型，例如：玄幻、修仙、异世大陆" value="${escapeAttr(state.query)}" data-input="book-search" aria-label="搜索书本">
+    </div>
+    <div class="category-strip">
+      ${bookCategoryButton("", "全部")}
+      ${categories.map((category) => bookCategoryButton(category, category)).join("")}
+    </div>
+    <div class="catalog-summary">
+      <strong>${books.length}</strong><span>本书本结果</span>
+      <strong>${categories.length}</strong><span>个书本分类</span>
+    </div>
+    <div class="book-library">
+      ${books.length ? books.map((book) => bookShelfCard(book)).join("") : `<p class="empty">没有找到相关书本</p>`}
+    </div>
+  `;
+}
+
+function chaptersView() {
   const chapters = filteredChapters();
   return `
     <div class="search-box">
       <input type="search" placeholder="搜索章名，例如：圣印、魔王、五星" value="${escapeAttr(state.query)}" data-input="chapter-search" aria-label="搜索章节">
     </div>
     <div class="category-strip">
-      ${categoryButton("", "全部")}
-      ${categoryButton("搞笑", "搞笑")}
-      ${categoryButton("圣印", "奇幻")}
-      ${categoryButton("王宫", "王宫")}
-      ${categoryButton("配送", "打工人")}
-      ${categoryButton("魔王", "魔王")}
+      ${chapterCategoryButton("", "全部")}
+      ${chapterCategoryButton("搞笑", "搞笑")}
+      ${chapterCategoryButton("圣印", "奇幻")}
+      ${chapterCategoryButton("王宫", "王宫")}
+      ${chapterCategoryButton("配送", "打工人")}
+      ${chapterCategoryButton("魔王", "魔王")}
     </div>
     <div class="catalog-summary">
       <strong>${chapters.length}</strong><span>个章节结果</span>
@@ -849,9 +872,14 @@ function recommendationCard(label, title, query) {
   `;
 }
 
-function categoryButton(query, label) {
+function bookCategoryButton(query, label) {
   const active = state.query === query ? " active" : "";
   return `<button class="${active}" type="button" data-query="${escapeAttr(query)}">${escapeHtml(label)}</button>`;
+}
+
+function chapterCategoryButton(query, label) {
+  const active = state.query === query ? " active" : "";
+  return `<button class="${active}" type="button" data-chapter-query="${escapeAttr(query)}">${escapeHtml(label)}</button>`;
 }
 
 function themeButton(theme, label) {
@@ -951,10 +979,41 @@ function bindEvents() {
     });
   });
 
-  const search = $app.querySelector("[data-input='chapter-search']");
-  if (search) {
-    search.addEventListener("input", () => {
-      state.query = search.value.trim();
+  $app.querySelectorAll("[data-chapter-query]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.query = button.dataset.chapterQuery || "";
+      state.view = "chapters";
+      state.settingsOpen = false;
+      render();
+    });
+  });
+
+  const bookSearch = $app.querySelector("[data-input='book-search']");
+  if (bookSearch) {
+    bookSearch.addEventListener("input", () => {
+      state.query = bookSearch.value.trim();
+      const list = $app.querySelector(".book-library");
+      const books = filteredBooks();
+      const summary = $app.querySelector(".catalog-summary");
+      list.innerHTML = books.length
+        ? books.map((book) => bookShelfCard(book)).join("")
+        : `<p class="empty">没有找到相关书本</p>`;
+      if (summary) {
+        summary.innerHTML = `<strong>${books.length}</strong><span>本书本结果</span><strong>${bookCategories().length}</strong><span>个书本分类</span>`;
+      }
+      $app.querySelectorAll(".category-strip button").forEach((button) => {
+        button.classList.toggle("active", button.dataset.query === state.query);
+      });
+      list.querySelectorAll("[data-book-id]").forEach((button) => {
+        button.addEventListener("click", () => selectBook(button.dataset.bookId));
+      });
+    });
+  }
+
+  const chapterSearch = $app.querySelector("[data-input='chapter-search']");
+  if (chapterSearch) {
+    chapterSearch.addEventListener("input", () => {
+      state.query = chapterSearch.value.trim();
       const list = $app.querySelector(".chapter-list");
       const chapters = filteredChapters();
       const summary = $app.querySelector(".catalog-summary");
@@ -965,7 +1024,7 @@ function bindEvents() {
         summary.innerHTML = `<strong>${chapters.length}</strong><span>个章节结果</span><strong>${progressPercent()}%</strong><span>已听进度</span>`;
       }
       $app.querySelectorAll(".category-strip button").forEach((button) => {
-        button.classList.toggle("active", button.dataset.query === state.query);
+        button.classList.toggle("active", button.dataset.chapterQuery === state.query);
       });
       list.querySelectorAll("[data-chapter]").forEach((button) => {
         button.addEventListener("click", () => openChapter(Number(button.dataset.chapter)));
@@ -1042,6 +1101,12 @@ function handleAction(action) {
     case "catalog":
       stopAudio(false);
       state.view = "catalog";
+      state.settingsOpen = false;
+      render();
+      break;
+    case "chapters":
+      stopAudio(false);
+      state.view = "chapters";
       state.settingsOpen = false;
       render();
       break;
@@ -1791,6 +1856,38 @@ function shelfCount() {
 function estimateChapterMinutes(chapter) {
   const words = Math.max(1, Number(chapter?.wordCount) || 2600);
   return Math.max(1, Math.round(words / 420));
+}
+
+function filteredBooks() {
+  if (!state.query) return state.books;
+  const query = state.query.toLowerCase();
+  return state.books.filter((book) => bookSearchText(book).includes(query));
+}
+
+function bookSearchText(book) {
+  return [
+    book.title,
+    book.subtitle,
+    book.author,
+    book.category,
+    book.status,
+    book.synopsis,
+    ...(Array.isArray(book.tags) ? book.tags : [])
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function bookCategories() {
+  const categories = new Set();
+  state.books.forEach((book) => {
+    if (book.category) {
+      book.category.split(/[·／/｜|、,，\s]+/).map((item) => item.trim()).filter(Boolean).forEach((item) => categories.add(item));
+    }
+    (Array.isArray(book.tags) ? book.tags : []).forEach((tag) => categories.add(tag));
+    if (book.status) {
+      categories.add(book.status);
+    }
+  });
+  return [...categories].slice(0, 12);
 }
 
 function filteredChapters() {
