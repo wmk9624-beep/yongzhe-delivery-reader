@@ -33,7 +33,7 @@ body {
     radial-gradient(circle at 18% 12%, rgba(255, 210, 87, 0.18), transparent 26%),
     linear-gradient(145deg, #dbe9e8 0%, #f8fbfa 44%, #e5eeee 100%);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
 }
 
 button,

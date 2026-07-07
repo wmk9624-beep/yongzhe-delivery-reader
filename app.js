@@ -1,5 +1,5 @@
 const $app = document.querySelector("#app");
-const APP_VERSION = "myth-v1";
+const APP_VERSION = "yeban-mainland-v1";
 
 const icons = {
   back: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>`,
@@ -21,7 +21,7 @@ const icons = {
 const state = {
   books: [],
   book: null,
-  activeBookId: "brave-delivery",
+  activeBookId: "myth-cultivation",
   view: "home",
   query: "",
   readingChapterId: 1,
@@ -57,12 +57,12 @@ const state = {
 };
 
 const STORAGE_KEYS = {
-  progress: "brave-delivery-progress",
-  progressByBook: "brave-delivery-progress-by-book",
-  selectedBook: "brave-delivery-selected-book",
-  reader: "brave-delivery-reader",
-  shelf: "brave-delivery-shelf",
-  bookmarks: "brave-delivery-bookmarks"
+  progress: "yeban-mainland-progress",
+  progressByBook: "yeban-mainland-progress-by-book",
+  selectedBook: "yeban-mainland-selected-book",
+  reader: "yeban-mainland-reader",
+  shelf: "yeban-mainland-shelf",
+  bookmarks: "yeban-mainland-bookmarks"
 };
 
 let speechQueue = [];
@@ -116,7 +116,7 @@ async function init() {
     $app.innerHTML = `
       <section class="screen screen-loading">
         <div class="brand-mark" aria-hidden="true"><span></span></div>
-        <p>書稿載入失敗</p>
+        <p>书稿载入失败</p>
       </section>
     `;
   }
@@ -183,7 +183,8 @@ async function loadBook(bookId) {
     throw new Error("book metadata not found");
   }
 
-  const response = await fetch(withVersion(meta.dataUrl || "data/book.json"), { cache: "no-store" });
+  const dataUrl = meta.dataUrl || `data/book.json?v=${APP_VERSION}`;
+  const response = await fetch(withVersion(dataUrl), { cache: "no-store" });
   if (!response.ok) {
     throw new Error("book data not found");
   }
@@ -228,7 +229,7 @@ function setupPwaInstall() {
     state.pwa.installAvailable = false;
     state.pwa.installed = true;
     render();
-    showToast("已安裝到主畫面");
+    showToast("已安装到主画面");
   });
 }
 
@@ -249,12 +250,12 @@ function registerServiceWorker() {
 
 async function installApp() {
   if (state.pwa.installed) {
-    showToast("App 已安裝");
+    showToast("App 已安装");
     return;
   }
 
   if (!installPromptEvent) {
-    showToast("可用瀏覽器選單加入主畫面");
+    showToast("可用浏览器菜单添加到桌面");
     return;
   }
 
@@ -264,7 +265,7 @@ async function installApp() {
   state.pwa.installAvailable = false;
   state.pwa.installed = choice.outcome === "accepted";
   render();
-  showToast(state.pwa.installed ? "已安裝到主畫面" : "已取消安裝");
+  showToast(state.pwa.installed ? "已安装到主画面" : "已取消安装");
 }
 
 function normalizeBook(book) {
@@ -327,10 +328,10 @@ function buildView() {
   }
 
   const titleMap = {
-    home: ["半夜偷咸鱼", "今晚繼續聽書"],
-    shelf: ["我的書架", `${state.books.length} 本作品`],
-    catalog: ["章節目錄", `${state.book.totalChapters} 章完整收錄`],
-    profile: ["我的", "閱讀設定與紀錄"]
+    home: ["夜半偷咸鱼", "大陆听书版"],
+    shelf: ["我的书架", `${state.books.length} 本作品`],
+    catalog: ["章节目录", `${state.book.totalChapters} 章完整收录`],
+    profile: ["我的", "阅读设置与记录"]
   };
   const [title, subtitle] = titleMap[state.view] || titleMap.home;
 
@@ -352,12 +353,12 @@ function buildView() {
 function topbar(title, subtitle) {
   return `
     <header class="topbar">
-      <button class="icon-button" type="button" data-action="home" aria-label="返回主頁">${icons.back}</button>
+      <button class="icon-button" type="button" data-action="home" aria-label="返回主页">${icons.back}</button>
       <div class="topbar-title">
         <strong>${escapeHtml(title)}</strong>
         <span>${escapeHtml(subtitle)}</span>
       </div>
-      <button class="icon-button" type="button" data-action="catalog" aria-label="搜尋章節">${icons.search}</button>
+      <button class="icon-button" type="button" data-action="catalog" aria-label="搜索章节">${icons.search}</button>
     </header>
   `;
 }
@@ -371,28 +372,28 @@ function homeView() {
 
   return `
     <button class="listen-search" type="button" data-action="catalog">
-      ${icons.search}<span>搜尋小說 / 章節 / 關鍵劇情</span>
+      ${icons.search}<span>搜索小说 / 章节 / 关键剧情</span>
     </button>
 
     <section class="continue-listen">
       <div class="continue-copy">
-        <span class="eyebrow">繼續收聽</span>
+        <span class="eyebrow">继续收听</span>
         <h1>${escapeHtml(book.title)}</h1>
         <p>${escapeHtml(current.title)}</p>
         <div class="listen-progress-line">
-          <span>已聽 ${percent}%</span>
-          <span>${estimateChapterMinutes(current)} 分鐘本章</span>
+          <span>已听 ${percent}%</span>
+          <span>${estimateChapterMinutes(current)} 分钟本章</span>
         </div>
       </div>
-      <button class="continue-play" type="button" data-action="listen-current" aria-label="繼續聽書">
-        ${icons.play}<span>繼續播放</span>
+      <button class="continue-play" type="button" data-action="listen-current" aria-label="继续听书">
+        ${icons.play}<span>继续播放</span>
       </button>
       <div class="progress-track"><div class="progress-fill" style="width:${percent}%"></div></div>
     </section>
 
     <section class="hero">
       <div class="book-hero">
-        <img class="cover" src="${escapeAttr(coverForBook(book))}" alt="《${escapeAttr(book.title)}》書封">
+        <img class="cover" src="${escapeAttr(coverForBook(book))}" alt="《${escapeAttr(book.title)}》书封">
         <div>
           <h1 class="book-title">${escapeHtml(book.title)}</h1>
           <p class="author">${escapeHtml(book.author)}</p>
@@ -402,65 +403,65 @@ function homeView() {
         </div>
       </div>
       <div class="stats">
-        <div class="stat"><strong>${formatWan(book.totalWords)}</strong><span>總字數</span></div>
-        <div class="stat"><strong>${book.totalChapters}</strong><span>章節</span></div>
-        <div class="stat"><strong>${book.status}</strong><span>狀態</span></div>
+        <div class="stat"><strong>${formatWan(book.totalWords)}</strong><span>总字数</span></div>
+        <div class="stat"><strong>${book.totalChapters}</strong><span>章节</span></div>
+        <div class="stat"><strong>${book.status}</strong><span>状态</span></div>
       </div>
     </section>
 
     <section class="panel quick-listen-panel">
       <div class="progress-block">
         <div class="progress-meta">
-          <span>${escapeHtml(next ? `下一章：${next.title}` : "已到最新章節")}</span>
+          <span>${escapeHtml(next ? `下一章：${next.title}` : "已到最新章节")}</span>
           <strong>${percent}%</strong>
         </div>
         <div class="progress-track"><div class="progress-fill" style="width:${percent}%"></div></div>
       </div>
       <div class="actions">
-        <button class="primary-button" type="button" data-action="continue">${icons.play}<span>繼續閱讀</span></button>
-        <button class="secondary-button" type="button" data-action="listen-current" aria-label="開始聽書">${icons.headphones}</button>
-        <button class="secondary-button" type="button" data-action="shelf-add" aria-label="加入書架">${icons.bookmark}</button>
+        <button class="primary-button" type="button" data-action="continue">${icons.play}<span>继续阅读</span></button>
+        <button class="secondary-button" type="button" data-action="listen-current" aria-label="开始听书">${icons.headphones}</button>
+        <button class="secondary-button" type="button" data-action="shelf-add" aria-label="加入书架">${icons.bookmark}</button>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-header">
-        <h2>今日推薦</h2>
+        <h2>今日推荐</h2>
         <button class="text-link" type="button" data-action="catalog">更多</button>
       </div>
       <div class="recommend-grid">
-        ${recommendationCard("今晚適合聽", "爆笑異世冒險", "搞笑")}
-        ${recommendationCard("一聽停不下來", "王宮危機與魔物", "聖印")}
-        ${recommendationCard("30 分鐘一章", "通勤剛剛好", "配送")}
-        ${recommendationCard("完結可連播", `${book.totalChapters} 章全收錄`, "完結")}
+        ${recommendationCard("今晚适合听", "爆笑异世冒险", "搞笑")}
+        ${recommendationCard("一听停不下来", "王宫危机与魔物", "圣印")}
+        ${recommendationCard("30 分钟一章", "通勤刚刚好", "配送")}
+        ${recommendationCard("完结可连播", `${book.totalChapters} 章全收录`, "完结")}
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-header">
-        <h2>我的書架</h2>
-        <button class="text-link" type="button" data-action="shelf">打開</button>
+        <h2>我的书架</h2>
+        <button class="text-link" type="button" data-action="shelf">打开</button>
       </div>
       <div class="library-shortcuts">
         <button type="button" data-action="shelf"><strong>${shelfCount()}</strong><span>收藏中</span></button>
-        <button type="button" data-action="catalog"><strong>${book.totalChapters}</strong><span>已離線</span></button>
-        <button type="button" data-action="continue"><strong>${current.id}</strong><span>最近聽過</span></button>
-        <button type="button" data-action="catalog"><strong>${book.status}</strong><span>完結小說</span></button>
+        <button type="button" data-action="catalog"><strong>${book.totalChapters}</strong><span>已离线</span></button>
+        <button type="button" data-action="continue"><strong>${current.id}</strong><span>最近听过</span></button>
+        <button type="button" data-action="catalog"><strong>${book.status}</strong><span>完结小说</span></button>
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-header">
-        <h2>作品簡介</h2>
-        <button class="text-link" type="button" data-action="catalog">全部章節</button>
+        <h2>作品简介</h2>
+        <button class="text-link" type="button" data-action="catalog">全部章节</button>
       </div>
       <p class="synopsis">${escapeHtml(book.synopsis)}</p>
     </section>
 
     <section class="panel">
       <div class="panel-header">
-        <h2>本週最熱</h2>
-        <button class="text-link" type="button" data-action="catalog">目錄</button>
+        <h2>本周最热</h2>
+        <button class="text-link" type="button" data-action="catalog">目录</button>
       </div>
       <div class="chapter-list">${chapterPreview}</div>
     </section>
@@ -474,16 +475,16 @@ function shelfView() {
   return `
     <section class="panel">
       <div class="panel-header">
-        <h2>繼續收聽</h2>
-        <button class="text-link" type="button" data-action="catalog">查看目錄</button>
+        <h2>继续收听</h2>
+        <button class="text-link" type="button" data-action="catalog">查看目录</button>
       </div>
       <article class="shelf-card current-book-card">
-        <img src="${escapeAttr(coverForBook(state.book))}" alt="《${escapeAttr(state.book.title)}》書封">
+        <img src="${escapeAttr(coverForBook(state.book))}" alt="《${escapeAttr(state.book.title)}》书封">
         <div>
           <h2>${escapeHtml(state.book.title)}</h2>
-          <p>${escapeHtml(current.title)} · 已聽 ${progressPercent()}% · 約 ${estimateChapterMinutes(current)} 分鐘</p>
-          <button class="primary-button wide-button" type="button" data-action="listen-current">${icons.headphones}<span>繼續播放</span></button>
-          <button class="secondary-button wide-button" type="button" data-action="continue">${icons.play}<span>邊聽邊看</span></button>
+          <p>${escapeHtml(current.title)} · 已听 ${progressPercent()}% · 约 ${estimateChapterMinutes(current)} 分钟</p>
+          <button class="primary-button wide-button" type="button" data-action="listen-current">${icons.headphones}<span>继续播放</span></button>
+          <button class="secondary-button wide-button" type="button" data-action="continue">${icons.play}<span>边听边看</span></button>
         </div>
       </article>
       <div class="chapter-list">
@@ -494,17 +495,17 @@ function shelfView() {
 
     <section class="panel">
       <div class="panel-header">
-        <h2>劇情書籤</h2>
-        <span class="panel-count">${bookmarks.length} 個</span>
+        <h2>剧情书签</h2>
+        <span class="panel-count">${bookmarks.length} 个</span>
       </div>
       <div class="chapter-list">
-        ${bookmarks.length ? bookmarks.map((chapter) => chapterRow(chapter)).join("") : `<p class="empty">還未收藏章節</p>`}
+        ${bookmarks.length ? bookmarks.map((chapter) => chapterRow(chapter)).join("") : `<p class="empty">还未收藏章节</p>`}
       </div>
     </section>
 
     <section class="panel">
       <div class="panel-header">
-        <h2>作品庫</h2>
+        <h2>作品库</h2>
         <span class="panel-count">${state.books.length} 本</span>
       </div>
       <div class="book-library">${bookCards}</div>
@@ -516,22 +517,22 @@ function catalogView() {
   const chapters = filteredChapters();
   return `
     <div class="search-box">
-      <input type="search" placeholder="搜尋章名，例如：聖印、魔王、五星" value="${escapeAttr(state.query)}" data-input="chapter-search" aria-label="搜尋章節">
+      <input type="search" placeholder="搜索章名，例如：圣印、魔王、五星" value="${escapeAttr(state.query)}" data-input="chapter-search" aria-label="搜索章节">
     </div>
     <div class="category-strip">
       ${categoryButton("", "全部")}
       ${categoryButton("搞笑", "搞笑")}
-      ${categoryButton("聖印", "奇幻")}
-      ${categoryButton("王宮", "王宮")}
+      ${categoryButton("圣印", "奇幻")}
+      ${categoryButton("王宫", "王宫")}
       ${categoryButton("配送", "打工人")}
       ${categoryButton("魔王", "魔王")}
     </div>
     <div class="catalog-summary">
-      <strong>${chapters.length}</strong><span>個章節結果</span>
-      <strong>${progressPercent()}%</strong><span>已聽進度</span>
+      <strong>${chapters.length}</strong><span>个章节结果</span>
+      <strong>${progressPercent()}%</strong><span>已听进度</span>
     </div>
     <div class="chapter-list">
-      ${chapters.length ? chapters.map((chapter) => chapterRow(chapter)).join("") : `<p class="empty">沒有找到相關章節</p>`}
+      ${chapters.length ? chapters.map((chapter) => chapterRow(chapter)).join("") : `<p class="empty">没有找到相关章节</p>`}
     </div>
   `;
 }
@@ -540,39 +541,39 @@ function profileView() {
   const current = currentChapter();
   return `
     <div class="profile-grid">
-      <div class="profile-cell"><strong>${progressPercent()}%</strong><span>閱讀進度</span></div>
-      <div class="profile-cell"><strong>${state.reader.fontSize}px</strong><span>字體大小</span></div>
-      <div class="profile-cell"><strong>${state.book.totalChapters}</strong><span>已收錄章節</span></div>
-      <div class="profile-cell"><strong>${formatWan(state.book.totalWords)}</strong><span>總字數</span></div>
+      <div class="profile-cell"><strong>${progressPercent()}%</strong><span>阅读进度</span></div>
+      <div class="profile-cell"><strong>${state.reader.fontSize}px</strong><span>字体大小</span></div>
+      <div class="profile-cell"><strong>${state.book.totalChapters}</strong><span>已收录章节</span></div>
+      <div class="profile-cell"><strong>${formatWan(state.book.totalWords)}</strong><span>总字数</span></div>
     </div>
     <section class="panel">
       <div class="panel-header">
-        <h2>目前閱讀</h2>
-        <button class="text-link" type="button" data-action="continue">打開</button>
+        <h2>目前阅读</h2>
+        <button class="text-link" type="button" data-action="continue">打开</button>
       </div>
       <div class="chapter-list">${chapterRow(current)}</div>
     </section>
     <section class="panel">
       <div class="panel-header">
-        <h2>閱讀偏好</h2>
+        <h2>阅读偏好</h2>
       </div>
       <div class="setting-row">
         <span>背景</span>
         <div class="segmented">
-          ${themeButton("paper", "紙本")}
-          ${themeButton("green", "護眼")}
-          ${themeButton("dark", "夜間")}
+          ${themeButton("paper", "纸本")}
+          ${themeButton("green", "护眼")}
+          ${themeButton("dark", "夜间")}
         </div>
       </div>
       <div class="setting-row">
-        <span>字體</span>
+        <span>字体</span>
         <div class="stepper">
           <button type="button" data-action="font-minus">A-</button>
           <button type="button" data-action="font-plus">A+</button>
         </div>
       </div>
       <div class="setting-row">
-        <span>語速</span>
+        <span>语速</span>
         <div class="speed-control">
           <button type="button" data-action="audio-rate-minus">慢</button>
           <strong>${state.reader.audioRate.toFixed(1)}x</strong>
@@ -580,15 +581,15 @@ function profileView() {
         </div>
       </div>
       <div class="setting-row">
-        <span>朗讀</span>
+        <span>朗读</span>
         <div class="segmented">
-          ${audioStyleButton("plain", "標準")}
-          ${audioStyleButton("story", "聽書")}
-          ${audioStyleButton("drama", "戲劇")}
+          ${audioStyleButton("plain", "标准")}
+          ${audioStyleButton("story", "听书")}
+          ${audioStyleButton("drama", "戏剧")}
         </div>
       </div>
       <div class="setting-row">
-        <span>聲音</span>
+        <span>声音</span>
         ${voiceSelect()}
       </div>
       <div class="setting-row">
@@ -600,23 +601,23 @@ function profileView() {
         </div>
       </div>
       <div class="setting-row">
-        <span>連播</span>
+        <span>连播</span>
         <div class="segmented">
-          ${autoNextButton(true, "開")}
-          ${autoNextButton(false, "關")}
+          ${autoNextButton(true, "开")}
+          ${autoNextButton(false, "关")}
         </div>
       </div>
       <div class="setting-row">
         <span>防黑屏</span>
         <div class="segmented">
-          ${keepAwakeButton(true, "開")}
-          ${keepAwakeButton(false, "關")}
+          ${keepAwakeButton(true, "开")}
+          ${keepAwakeButton(false, "关")}
         </div>
       </div>
       <div class="setting-row">
-        <span>定時</span>
+        <span>定时</span>
         <div class="timer-buttons">
-          ${sleepButton(0, "關")}
+          ${sleepButton(0, "关")}
           ${sleepButton(15, "15")}
           ${sleepButton(30, "30")}
           ${sleepButton(45, "45")}
@@ -630,11 +631,11 @@ function profileView() {
         <h2>App 模式</h2>
       </div>
       <div class="app-mode-grid">
-        <div><strong>${state.pwa.offlineReady ? "已啟用" : "準備中"}</strong><span>離線閱讀</span></div>
-        <div><strong>${state.pwa.installed ? "已安裝" : "可安裝"}</strong><span>手機主畫面</span></div>
+        <div><strong>${state.pwa.offlineReady ? "已启用" : "准备中"}</strong><span>离线阅读</span></div>
+        <div><strong>${state.pwa.installed ? "已安装" : "可安装"}</strong><span>手机主画面</span></div>
       </div>
       <button class="primary-button wide-button" type="button" data-action="install-app" ${state.pwa.installed ? "disabled" : ""}>
-        ${icons.plus}<span>${state.pwa.installed ? "已安裝" : "安裝 App"}</span>
+        ${icons.plus}<span>${state.pwa.installed ? "已安装" : "安装 App"}</span>
       </button>
     </section>
   `;
@@ -659,7 +660,7 @@ function readerView() {
           <strong>${escapeHtml(chapter.numberText)}</strong>
           <span>${escapeHtml(shortChapterTitle(chapter.title))}</span>
         </div>
-        <button class="icon-button" type="button" data-action="toggle-settings" aria-label="閱讀設定">${icons.settings}</button>
+        <button class="icon-button" type="button" data-action="toggle-settings" aria-label="阅读设置">${icons.settings}</button>
       </header>
       <article class="reader-content" data-reader-content>
         <h1>${escapeHtml(chapter.title)}</h1>
@@ -682,8 +683,8 @@ function audioDock(chapter) {
   const paused = active && state.audio.paused;
   const mainAction = active ? (paused ? "audio-resume" : "audio-pause") : "audio-play";
   const mainIcon = active && !paused ? icons.pause : icons.headphones;
-  const mainLabel = !supported ? "不支援聽書" : active ? (paused ? "繼續播放" : "暫停") : "朗讀本章";
-  const status = !supported ? "瀏覽器未支援" : active ? (paused ? "已暫停" : "朗讀中") : "聽書模式";
+  const mainLabel = !supported ? "不支持听书" : active ? (paused ? "继续播放" : "暂停") : "朗读本章";
+  const status = !supported ? "浏览器未支持" : active ? (paused ? "已暂停" : "朗读中") : "听书模式";
   const prev = previousChapter(chapter.id);
   const next = nextChapter(chapter.id);
   const bookmarked = isChapterBookmarked(chapter.id);
@@ -700,12 +701,12 @@ function audioDock(chapter) {
         <button class="audio-main" type="button" data-action="${mainAction}" ${supported ? "" : "disabled"} aria-label="${mainLabel}">
           ${mainIcon}<span>${mainLabel}</span>
         </button>
-        <button type="button" data-action="audio-forward" ${active ? "" : "disabled"} aria-label="快進 15 秒"><span>15</span></button>
+        <button type="button" data-action="audio-forward" ${active ? "" : "disabled"} aria-label="快进 15 秒"><span>15</span></button>
         <button type="button" data-action="audio-next-chapter" ${next ? "" : "disabled"} aria-label="下一章">${icons.back}</button>
       </div>
       <div class="audio-extra">
         <button type="button" data-action="toggle-bookmark" class="${bookmarked ? "active" : ""}">${icons.bookmark}<span>${bookmarked ? "已收藏" : "收藏本章"}</span></button>
-        <button type="button" data-action="sleep-chapter-end" class="${state.reader.stopAfterChapter ? "active" : ""}"><span>${state.reader.stopAfterChapter ? "本章後停" : "本章停止"}</span></button>
+        <button type="button" data-action="sleep-chapter-end" class="${state.reader.stopAfterChapter ? "active" : ""}"><span>${state.reader.stopAfterChapter ? "本章后停" : "本章停止"}</span></button>
         <button type="button" data-action="audio-stop" ${active ? "" : "disabled"}>${icons.stop}<span>停止</span></button>
       </div>
     </div>
@@ -718,20 +719,20 @@ function settingsSheet() {
       <div class="setting-row">
         <span>背景</span>
         <div class="segmented">
-          ${themeButton("paper", "紙本")}
-          ${themeButton("green", "護眼")}
-          ${themeButton("dark", "夜間")}
+          ${themeButton("paper", "纸本")}
+          ${themeButton("green", "护眼")}
+          ${themeButton("dark", "夜间")}
         </div>
       </div>
       <div class="setting-row">
-        <span>字體</span>
+        <span>字体</span>
         <div class="stepper">
           <button type="button" data-action="font-minus">A-</button>
           <button type="button" data-action="font-plus">A+</button>
         </div>
       </div>
       <div class="setting-row">
-        <span>語速</span>
+        <span>语速</span>
         <div class="speed-control">
           <button type="button" data-action="audio-rate-minus">慢</button>
           <strong>${state.reader.audioRate.toFixed(1)}x</strong>
@@ -739,15 +740,15 @@ function settingsSheet() {
         </div>
       </div>
       <div class="setting-row">
-        <span>朗讀</span>
+        <span>朗读</span>
         <div class="segmented">
-          ${audioStyleButton("plain", "標準")}
-          ${audioStyleButton("story", "聽書")}
-          ${audioStyleButton("drama", "戲劇")}
+          ${audioStyleButton("plain", "标准")}
+          ${audioStyleButton("story", "听书")}
+          ${audioStyleButton("drama", "戏剧")}
         </div>
       </div>
       <div class="setting-row">
-        <span>聲音</span>
+        <span>声音</span>
         ${voiceSelect()}
       </div>
       <div class="setting-row">
@@ -759,23 +760,23 @@ function settingsSheet() {
         </div>
       </div>
       <div class="setting-row">
-        <span>連播</span>
+        <span>连播</span>
         <div class="segmented">
-          ${autoNextButton(true, "開")}
-          ${autoNextButton(false, "關")}
+          ${autoNextButton(true, "开")}
+          ${autoNextButton(false, "关")}
         </div>
       </div>
       <div class="setting-row">
         <span>防黑屏</span>
         <div class="segmented">
-          ${keepAwakeButton(true, "開")}
-          ${keepAwakeButton(false, "關")}
+          ${keepAwakeButton(true, "开")}
+          ${keepAwakeButton(false, "关")}
         </div>
       </div>
       <div class="setting-row">
-        <span>定時</span>
+        <span>定时</span>
         <div class="timer-buttons">
-          ${sleepButton(0, "關")}
+          ${sleepButton(0, "关")}
           ${sleepButton(15, "15")}
           ${sleepButton(30, "30")}
           ${sleepButton(45, "45")}
@@ -790,14 +791,14 @@ function settingsSheet() {
 
 function tabbar() {
   const items = [
-    ["shelf", "書架", icons.book],
-    ["catalog", "分類", icons.grid],
-    ["home", "閱讀", icons.read],
+    ["shelf", "书架", icons.book],
+    ["catalog", "分类", icons.grid],
+    ["home", "阅读", icons.read],
     ["profile", "我的", icons.user]
   ];
 
   return `
-    <nav class="tabbar" aria-label="主要導覽">
+    <nav class="tabbar" aria-label="主要导览">
       ${items.map(([view, label, icon]) => `
         <button class="tab-button ${state.view === view ? "active" : ""}" type="button" data-view="${view}" aria-label="${label}">
           ${icon}<span>${label}</span>
@@ -814,7 +815,7 @@ function chapterRow(chapter) {
     <button class="chapter-row${active}" type="button" data-chapter="${chapter.id}">
       <span>
         <strong>${bookmarked ? "★ " : ""}${escapeHtml(chapter.title)}</strong>
-        <span>${formatWords(chapter.wordCount)} · 約 ${estimateChapterMinutes(chapter)} 分鐘</span>
+        <span>${formatWords(chapter.wordCount)} · 约 ${estimateChapterMinutes(chapter)} 分钟</span>
       </span>
       <span class="badge">${chapter.id}/${state.book.totalChapters}</span>
     </button>
@@ -827,12 +828,12 @@ function bookShelfCard(book) {
   const active = book.id === state.activeBookId ? " active" : "";
   return `
     <article class="shelf-card library-book${active}">
-      <img src="${escapeAttr(coverForBook(book))}" alt="《${escapeAttr(book.title)}》書封">
+      <img src="${escapeAttr(coverForBook(book))}" alt="《${escapeAttr(book.title)}》书封">
       <div>
         <h2>${escapeHtml(book.title)}</h2>
-        <p>${escapeHtml(book.category || book.subtitle || "")} · ${book.totalChapters || 0} 章 · 已讀 ${percent}%</p>
+        <p>${escapeHtml(book.category || book.subtitle || "")} · ${book.totalChapters || 0} 章 · 已读 ${percent}%</p>
         <button class="secondary-button wide-button" type="button" data-book-id="${escapeAttr(book.id)}">
-          ${icons.book}<span>${active ? "目前閱讀" : "打開作品"}</span>
+          ${icons.book}<span>${active ? "目前阅读" : "打开作品"}</span>
         </button>
       </div>
     </article>
@@ -864,8 +865,8 @@ function audioStyleButton(style, label) {
 function voiceSelect() {
   const voices = voiceOptions();
   return `
-    <select class="voice-select" data-input="voice-select" aria-label="選擇朗讀聲音">
-      <option value="">自動選擇中文聲音</option>
+    <select class="voice-select" data-input="voice-select" aria-label="选择朗读声音">
+      <option value="">自动选择中文声音</option>
       ${voices.map((voice) => `
         <option value="${escapeAttr(voice.voiceURI)}" ${state.reader.audioVoiceURI === voice.voiceURI ? "selected" : ""}>
           ${escapeHtml(voice.name)} · ${escapeHtml(voice.lang)}
@@ -879,20 +880,19 @@ function voiceOptions() {
   if (!audioSupported()) return [];
   cachedVoices = window.speechSynthesis.getVoices();
   return cachedVoices
-    .filter((voice) => /^zh/i.test(voice.lang) || /Chinese|Cantonese|Mandarin|中文|粵|台|臺|香港|普通話|Natural|Neural|Xiaoxiao|Xiaoyi|Yunxi|Yunjian|Yunyang/i.test(voice.name))
+    .filter((voice) => /^zh/i.test(voice.lang) || /Chinese|Mandarin|中文|汉语|普通话|大陆|中国|简体|Natural|Neural|Xiaoxiao|Xiaoyi|Yunxi|Yunjian|Yunyang|Huihui|Kangkang|Yaoyao/i.test(voice.name))
     .sort((a, b) => voiceRank(a) - voiceRank(b) || a.name.localeCompare(b.name));
 }
 
 function voiceRank(voice) {
   const name = voice.name || "";
   const lang = voice.lang || "";
-  if (/zh-(HK|TW|MO)/i.test(lang) && /Natural|Neural|Online/i.test(name)) return 0;
-  if (/zh-(HK|MO)/i.test(lang) || /Cantonese|粵|香港/i.test(name)) return 1;
-  if (/zh-TW/i.test(lang) || /台|臺/i.test(name)) return 2;
-  if (/zh-CN/i.test(lang) && /Natural|Neural|Online|Xiaoxiao|Xiaoyi|Yunxi|Yunjian|Yunyang/i.test(name)) return 3;
-  if (/zh-CN/i.test(lang) || /Mandarin|普通話/i.test(name)) return 4;
-  if (/^zh/i.test(lang)) return 5;
-  return 6;
+  if (/zh-CN/i.test(lang) && /Natural|Neural|Online|Xiaoxiao|Xiaoyi|Yunxi|Yunjian|Yunyang/i.test(name)) return 0;
+  if (/zh-CN/i.test(lang) || /Mandarin|普通话|大陆|中国|简体|Huihui|Kangkang|Yaoyao/i.test(name)) return 1;
+  if (/^zh/i.test(lang)) return 2;
+  if (/zh-(HK|MO)/i.test(lang) || /Cantonese|粤|香港/i.test(name)) return 3;
+  if (/zh-TW/i.test(lang) || /台|臺/i.test(name)) return 4;
+  return 5;
 }
 
 function autoNextButton(value, label) {
@@ -960,9 +960,9 @@ function bindEvents() {
       const summary = $app.querySelector(".catalog-summary");
       list.innerHTML = chapters.length
         ? chapters.map((chapter) => chapterRow(chapter)).join("")
-        : `<p class="empty">沒有找到相關章節</p>`;
+        : `<p class="empty">没有找到相关章节</p>`;
       if (summary) {
-        summary.innerHTML = `<strong>${chapters.length}</strong><span>個章節結果</span><strong>${progressPercent()}%</strong><span>已聽進度</span>`;
+        summary.innerHTML = `<strong>${chapters.length}</strong><span>个章节结果</span><strong>${progressPercent()}%</strong><span>已听进度</span>`;
       }
       $app.querySelectorAll(".category-strip button").forEach((button) => {
         button.classList.toggle("active", button.dataset.query === state.query);
@@ -1062,7 +1062,7 @@ function handleAction(action) {
         ...readStorage(STORAGE_KEYS.shelf),
         [state.activeBookId]: { added: true, at: Date.now() }
       });
-      showToast("已加入書架");
+      showToast("已加入书架");
       break;
     case "install-app":
       installApp();
@@ -1155,9 +1155,9 @@ async function selectBook(bookId, targetView = "home") {
     state.query = "";
     state.settingsOpen = false;
     render();
-    showToast("已切換作品");
+    showToast("已切换作品");
   } catch {
-    showToast("作品載入失敗");
+    showToast("作品载入失败");
   }
 }
 
@@ -1198,7 +1198,7 @@ async function requestWakeLock() {
   if (!wakeLockSupported()) {
     if (!wakeLockWarningShown) {
       wakeLockWarningShown = true;
-      showToast("這部手機不支援防黑屏，鎖屏後可能暫停");
+      showToast("这部手机不支持防黑屏，锁屏后可能暂停");
     }
     return false;
   }
@@ -1219,7 +1219,7 @@ async function requestWakeLock() {
   } catch (error) {
     if (!wakeLockWarningShown) {
       wakeLockWarningShown = true;
-      showToast("防黑屏未能啟用，請保持頁面在前台");
+      showToast("防黑屏未能启用，请保持页面在前台");
     }
     wakeLockSentinel = null;
     return false;
@@ -1234,9 +1234,9 @@ function releaseWakeLock() {
 }
 
 function wakeLockStatusLabel() {
-  if (!state.reader.keepAwake) return "防黑屏關";
-  if (!wakeLockSupported()) return "防黑屏未支援";
-  return wakeLockSentinel ? "防黑屏開" : "防黑屏待命";
+  if (!state.reader.keepAwake) return "防黑屏关";
+  if (!wakeLockSupported()) return "防黑屏未支持";
+  return wakeLockSentinel ? "防黑屏开" : "防黑屏待命";
 }
 
 function setupMediaSessionHandlers() {
@@ -1281,8 +1281,8 @@ function updateMediaSession(chapter = currentAudioChapter()) {
   if (chapter && "MediaMetadata" in window) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: chapter.title,
-      artist: state.book?.title || "半夜偷咸鱼",
-      album: "半夜偷咸鱼"
+      artist: state.book?.title || "夜半偷咸鱼",
+      album: "夜半偷咸鱼听书"
     });
   }
 
@@ -1298,7 +1298,7 @@ function currentAudioChapter() {
 
 function startAudio(chapterId, options = {}) {
   if (!audioSupported()) {
-    showToast("這個瀏覽器暫時不支援聽書");
+    showToast("这个浏览器暂时不支持听书");
     return;
   }
 
@@ -1421,7 +1421,7 @@ function finishAudio() {
     state.settingsOpen = false;
     persistProgress();
     render();
-    showToast("自動播放下一章");
+    showToast("自动播放下一章");
     startAudio(followingChapter.id, { keepSleepTimer: true });
     return;
   }
@@ -1430,7 +1430,7 @@ function finishAudio() {
   updateMediaSession();
   clearSleepTimer(false);
   render();
-  showToast(shouldStopAfterChapter ? "已播完本章並停止" : followingChapter ? "睡眠定時已停止朗讀" : "本章朗讀完畢");
+  showToast(shouldStopAfterChapter ? "已播完本章并停止" : followingChapter ? "睡眠定时已停止朗读" : "本章朗读完毕");
 }
 
 function setSleepTimer(minutes) {
@@ -1446,7 +1446,7 @@ function setSleepTimer(minutes) {
   }
 
   render();
-  showToast(allowedMinutes ? `已設定 ${allowedMinutes} 分鐘後停止` : "已關閉睡眠定時");
+  showToast(allowedMinutes ? `已设置 ${allowedMinutes} 分钟后停止` : "已关闭睡眠定时");
 }
 
 function setStopAfterChapter(enabled) {
@@ -1457,7 +1457,7 @@ function setStopAfterChapter(enabled) {
   }
   persistReader();
   render();
-  showToast(enabled ? "會在本章播完後停止" : "已關閉本章停止");
+  showToast(enabled ? "会在本章播完后停止" : "已关闭本章停止");
 }
 
 function ensureSleepTimer() {
@@ -1485,7 +1485,7 @@ function scheduleSleepTimer() {
     persistReader();
     stopAudio(false, { keepSleepTimer: true });
     render();
-    showToast("睡眠定時已停止朗讀");
+    showToast("睡眠定时已停止朗读");
   }, delay);
 }
 
@@ -1500,21 +1500,21 @@ function sleepTimerExpired() {
 }
 
 function sleepStatusLabel() {
-  if (state.reader.stopAfterChapter) return "本章後停";
+  if (state.reader.stopAfterChapter) return "本章后停";
 
   if (sleepEndsAt) {
     const remaining = Math.max(1, Math.ceil((sleepEndsAt - Date.now()) / 60000));
-    return `${remaining} 分鐘後停`;
+    return `${remaining} 分钟后停`;
   }
 
-  return state.reader.sleepMinutes ? `${state.reader.sleepMinutes} 分鐘定時` : "定時關";
+  return state.reader.sleepMinutes ? `${state.reader.sleepMinutes} 分钟定时` : "定时关";
 }
 
 function audioModeLabel() {
   const labels = {
-    plain: "標準",
-    story: "聽書",
-    drama: "戲劇"
+    plain: "标准",
+    story: "听书",
+    drama: "戏剧"
   };
   const style = labels[normalizeAudioStyle(state.reader.audioStyle)];
   const voice = selectedVoice();
@@ -1537,7 +1537,7 @@ function speakNextChunk() {
     utterance.voice = voice;
     utterance.lang = voice.lang;
   } else {
-    utterance.lang = "zh-Hant";
+    utterance.lang = "zh-CN";
   }
   utterance.rate = prosody.rate;
   utterance.pitch = prosody.pitch;
@@ -1557,7 +1557,7 @@ function speakNextChunk() {
     if (!state.audio.active || event.error === "interrupted" || event.error === "canceled") return;
     stopAudio(false);
     render();
-    showToast("朗讀被瀏覽器中止");
+    showToast("朗读被浏览器中止");
   };
 
   activeUtterance = utterance;
@@ -1626,7 +1626,7 @@ function classifySpeechText(text) {
   const clean = text.trim();
   if (/^【.+】$/.test(clean)) return "system";
   if (/^[「“『].+[」”』]$/.test(clean) || /[：:]\s*[「“『]/.test(clean) || /[「」“”『』]/.test(clean)) return "dialogue";
-  if (/[？！!?]$/.test(clean) || /轟|咚|砰|叮|咔|警告|倒計時/.test(clean)) return "emphasis";
+  if (/[？！!?]$/.test(clean) || /轰|咚|砰|叮|咔|警告|倒计时/.test(clean)) return "emphasis";
   return "narration";
 }
 
@@ -1710,10 +1710,9 @@ function preferredVoice() {
 
   cachedVoices = window.speechSynthesis.getVoices();
   return selectedVoice()
-    || cachedVoices.find((voice) => /^zh-(HK|TW|MO)$/i.test(voice.lang) && /Natural|Neural|Online/i.test(voice.name))
-    || cachedVoices.find((voice) => /^zh-(HK|TW|MO)$/i.test(voice.lang))
-    || cachedVoices.find((voice) => /^zh-Hant/i.test(voice.lang))
     || cachedVoices.find((voice) => /^zh-CN$/i.test(voice.lang) && /Natural|Neural|Online|Xiaoxiao|Xiaoyi|Yunxi|Yunjian|Yunyang/i.test(voice.name))
+    || cachedVoices.find((voice) => /^zh-CN$/i.test(voice.lang))
+    || cachedVoices.find((voice) => /Mandarin|普通话|大陆|中国|简体|Xiaoxiao|Xiaoyi|Yunxi|Yunjian|Yunyang|Huihui/i.test(voice.name))
     || cachedVoices.find((voice) => /^zh/i.test(voice.lang))
     || null;
 }
@@ -1729,7 +1728,7 @@ function listeningPreviewChapters() {
   const candidates = [
     current,
     nextChapter(current.id),
-    state.book.chapters.find((chapter) => /聖印|魔王|王宮|配送|五星/.test(chapter.title + chapter.content))
+    state.book.chapters.find((chapter) => /圣印|魔王|王宫|配送|五星/.test(chapter.title + chapter.content))
   ].filter(Boolean);
   return uniqueChapters(candidates).slice(0, 3);
 }
@@ -1781,7 +1780,7 @@ function toggleBookmark(chapterId) {
   state.bookmarksByBook[state.activeBookId] = exists ? ids.filter((item) => item !== id) : [...ids, id].sort((a, b) => a - b);
   persistBookmarks();
   render();
-  showToast(exists ? "已移除章節書籤" : "已收藏本章");
+  showToast(exists ? "已移除章节书签" : "已收藏本章");
 }
 
 function shelfCount() {
@@ -1861,14 +1860,14 @@ function shortChapterTitle(title) {
 
 function formatWan(value) {
   if (value >= 10000) {
-    return `${(value / 10000).toFixed(1)}萬`;
+    return `${(value / 10000).toFixed(1)}万`;
   }
   return String(value);
 }
 
 function formatWords(value) {
   if (value >= 10000) {
-    return `${(value / 10000).toFixed(1)}萬字`;
+    return `${(value / 10000).toFixed(1)}万字`;
   }
   return `${value}字`;
 }
