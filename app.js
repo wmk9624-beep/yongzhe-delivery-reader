@@ -1,5 +1,5 @@
 const $app = document.querySelector("#app");
-const APP_VERSION = "yeban-mainland-v2";
+const APP_VERSION = "yeban-mainland-v3";
 
 const icons = {
   back: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>`,
@@ -24,6 +24,8 @@ const state = {
   activeBookId: "myth-cultivation",
   view: "home",
   query: "",
+  bookQuery: "",
+  bookCategory: "",
   readingChapterId: 1,
   settingsOpen: false,
   progressByBook: {},
@@ -328,7 +330,7 @@ function buildView() {
   }
 
   const titleMap = {
-    home: ["夜半偷咸鱼", "大陆听书版"],
+    home: ["夜半偷鹹魚", "大陆听书版"],
     shelf: ["我的书架", `${state.books.length} 本作品`],
     catalog: ["书本分类", `${state.books.length} 本作品`],
     chapters: ["章节目录", `${state.book.totalChapters} 章完整收录`],
@@ -520,7 +522,7 @@ function catalogView() {
   const categories = bookCategories();
   return `
     <div class="search-box">
-      <input type="search" placeholder="搜索书名、作者、类型，例如：玄幻、修仙、异世大陆" value="${escapeAttr(state.query)}" data-input="book-search" aria-label="搜索书本">
+      <input type="search" placeholder="搜索书名、作者、类型，例如：玄幻、修仙、异世大陆" value="${escapeAttr(state.bookQuery)}" data-input="book-search" aria-label="搜索书本">
     </div>
     <div class="category-strip">
       ${bookCategoryButton("", "全部")}
@@ -863,18 +865,18 @@ function bookShelfCard(book) {
   `;
 }
 
-function recommendationCard(label, title, query) {
+function recommendationCard(label, title, category) {
   return `
-    <button class="recommend-card" type="button" data-query="${escapeAttr(query)}">
+    <button class="recommend-card" type="button" data-book-category="${escapeAttr(category)}">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(title)}</strong>
     </button>
   `;
 }
 
-function bookCategoryButton(query, label) {
-  const active = state.query === query ? " active" : "";
-  return `<button class="${active}" type="button" data-query="${escapeAttr(query)}">${escapeHtml(label)}</button>`;
+function bookCategoryButton(category, label) {
+  const active = state.bookCategory === category ? " active" : "";
+  return `<button class="${active}" type="button" data-book-category="${escapeAttr(category)}">${escapeHtml(label)}</button>`;
 }
 
 function chapterCategoryButton(query, label) {
@@ -970,9 +972,9 @@ function bindEvents() {
     });
   });
 
-  $app.querySelectorAll("[data-query]").forEach((button) => {
+  $app.querySelectorAll("[data-book-category]").forEach((button) => {
     button.addEventListener("click", () => {
-      state.query = button.dataset.query || "";
+      state.bookCategory = button.dataset.bookCategory || "";
       state.view = "catalog";
       state.settingsOpen = false;
       render();
@@ -991,20 +993,22 @@ function bindEvents() {
   const bookSearch = $app.querySelector("[data-input='book-search']");
   if (bookSearch) {
     bookSearch.addEventListener("input", () => {
-      state.query = bookSearch.value.trim();
+      state.bookQuery = bookSearch.value.trim();
       const list = $app.querySelector(".book-library");
       const books = filteredBooks();
       const summary = $app.querySelector(".catalog-summary");
-      list.innerHTML = books.length
-        ? books.map((book) => bookShelfCard(book)).join("")
-        : `<p class="empty">没有找到相关书本</p>`;
+      if (list) {
+        list.innerHTML = books.length
+          ? books.map((book) => bookShelfCard(book)).join("")
+          : `<p class="empty">没有找到相关书本</p>`;
+      }
       if (summary) {
         summary.innerHTML = `<strong>${books.length}</strong><span>本书本结果</span><strong>${bookCategories().length}</strong><span>个书本分类</span>`;
       }
       $app.querySelectorAll(".category-strip button").forEach((button) => {
-        button.classList.toggle("active", button.dataset.query === state.query);
+        button.classList.toggle("active", button.dataset.bookCategory === state.bookCategory);
       });
-      list.querySelectorAll("[data-book-id]").forEach((button) => {
+      list?.querySelectorAll("[data-book-id]").forEach((button) => {
         button.addEventListener("click", () => selectBook(button.dataset.bookId));
       });
     });
@@ -1208,6 +1212,9 @@ function handleAction(action) {
 async function selectBook(bookId, targetView = "home") {
   if (!bookId || bookId === state.activeBookId) {
     state.view = targetView;
+    state.query = "";
+    state.bookQuery = "";
+    state.bookCategory = "";
     state.settingsOpen = false;
     render();
     return;
@@ -1218,6 +1225,8 @@ async function selectBook(bookId, targetView = "home") {
     await loadBook(bookId);
     state.view = targetView;
     state.query = "";
+    state.bookQuery = "";
+    state.bookCategory = "";
     state.settingsOpen = false;
     render();
     showToast("已切换作品");
@@ -1346,8 +1355,8 @@ function updateMediaSession(chapter = currentAudioChapter()) {
   if (chapter && "MediaMetadata" in window) {
     navigator.mediaSession.metadata = new MediaMetadata({
       title: chapter.title,
-      artist: state.book?.title || "夜半偷咸鱼",
-      album: "夜半偷咸鱼听书"
+      artist: state.book?.title || "夜半偷鹹魚",
+      album: "夜半偷鹹魚"
     });
   }
 
@@ -1859,9 +1868,13 @@ function estimateChapterMinutes(chapter) {
 }
 
 function filteredBooks() {
-  if (!state.query) return state.books;
-  const query = state.query.toLowerCase();
-  return state.books.filter((book) => bookSearchText(book).includes(query));
+  const query = state.bookQuery.trim().toLowerCase();
+  const category = state.bookCategory;
+  return state.books.filter((book) => {
+    const matchesQuery = !query || bookSearchText(book).includes(query);
+    const matchesCategory = !category || bookMatchesCategory(book, category);
+    return matchesQuery && matchesCategory;
+  });
 }
 
 function bookSearchText(book) {
@@ -1887,7 +1900,17 @@ function bookCategories() {
       categories.add(book.status);
     }
   });
-  return [...categories].slice(0, 12);
+  return [...categories].filter(Boolean).sort((a, b) => a.localeCompare(b, "zh-Hans")).slice(0, 12);
+}
+
+function bookMatchesCategory(book, category) {
+  const values = [];
+  if (book.category) {
+    values.push(...book.category.split(/[·／/｜|、,，\s]+/).map((item) => item.trim()).filter(Boolean));
+  }
+  values.push(...(Array.isArray(book.tags) ? book.tags : []));
+  if (book.status) values.push(book.status);
+  return values.some((value) => value.includes(category) || category.includes(value));
 }
 
 function filteredChapters() {

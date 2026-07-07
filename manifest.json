@@ -1,13 +1,13 @@
 {
-  "name": "夜半偷咸鱼听书",
-  "short_name": "夜半偷咸鱼",
+  "name": "夜半偷鹹魚",
+  "short_name": "夜半偷鹹魚",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#eef5f4",
   "theme_color": "#0d3b42",
-  "description": "夜半偷咸鱼大陆听书版，本地阅读、普通话朗读、离线可用。",
+  "description": "夜半偷鹹魚大陆听书版，本地阅读、普通话朗读、离线可用。",
   "categories": ["books", "entertainment"],
   "icons": [
     {
