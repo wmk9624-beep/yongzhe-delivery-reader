@@ -1,4 +1,4 @@
-const CACHE_NAME = "yeban-xianyu-mainland-reader-v3";
+const CACHE_NAME = "yeban-xianyu-mainland-reader-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const APP_SHELL = [
   "./manifest.json",
   "./data/books.json",
   "./data/book.json",
+  "./data/myth-cultivation.json",
   "./assets/cover.png",
   "./assets/favicon-32.png",
   "./assets/icon-192.png",
@@ -63,7 +64,9 @@ function isFreshAsset(url) {
     "/app.js",
     "/styles.css",
     "/manifest.json",
-    "/data/books.json"
+    "/data/books.json",
+    "/data/book.json",
+    "/data/myth-cultivation.json"
   ].some((path) => url.pathname.endsWith(path));
 }
 
