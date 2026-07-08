@@ -1,5 +1,5 @@
 const $app = document.querySelector("#app");
-const APP_VERSION = "yeban-mainland-v3";
+const APP_VERSION = "yeban-mainland-v4";
 
 const icons = {
   back: `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>`,
@@ -43,6 +43,7 @@ const state = {
     audioVoiceURI: "",
     audioAutoNext: true,
     keepAwake: true,
+    lockScreenAudio: true,
     stopAfterChapter: false,
     sleepMinutes: 0
   },
@@ -76,6 +77,9 @@ let sleepEndsAt = null;
 let installPromptEvent = null;
 let wakeLockSentinel = null;
 let wakeLockWarningShown = false;
+let lockScreenAudioElement = null;
+let lockScreenAudioUrl = "";
+let lockScreenAudioWarningShown = false;
 
 init();
 setupPwaInstall();
@@ -155,6 +159,7 @@ function loadLocalState() {
       audioVoiceURI: storedReader.audioVoiceURI || "",
       audioAutoNext: storedReader.audioAutoNext !== false,
       keepAwake: storedReader.keepAwake !== false,
+      lockScreenAudio: storedReader.lockScreenAudio !== false,
       stopAfterChapter: storedReader.stopAfterChapter === true,
       sleepMinutes: [0, 15, 30, 45, 60].includes(Number(storedReader.sleepMinutes)) ? Number(storedReader.sleepMinutes) : 0
     };
@@ -640,6 +645,13 @@ function profileView() {
         </div>
       </div>
       <div class="setting-row">
+        <span>锁屏续播</span>
+        <div class="segmented">
+          ${lockScreenAudioButton(true, "开")}
+          ${lockScreenAudioButton(false, "关")}
+        </div>
+      </div>
+      <div class="setting-row">
         <span>定时</span>
         <div class="timer-buttons">
           ${sleepButton(0, "关")}
@@ -718,7 +730,7 @@ function audioDock(chapter) {
     <div class="audio-dock ${active ? "active" : ""}">
       <div class="audio-meta">
         <strong>${status}</strong>
-        <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${escapeHtml(audioModeLabel())} · ${escapeHtml(wakeLockStatusLabel())} · ${state.reader.audioRate.toFixed(1)}x · ${sleepStatusLabel()}</span>
+        <span>${escapeHtml(shortChapterTitle(chapter.title))} · ${escapeHtml(audioModeLabel())} · ${escapeHtml(wakeLockStatusLabel())} · ${escapeHtml(lockScreenAudioStatusLabel())} · ${state.reader.audioRate.toFixed(1)}x · ${sleepStatusLabel()}</span>
       </div>
       <div class="audio-controls">
         <button type="button" data-action="audio-prev-chapter" ${prev ? "" : "disabled"} aria-label="上一章">${icons.back}</button>
@@ -796,6 +808,13 @@ function settingsSheet() {
         <div class="segmented">
           ${keepAwakeButton(true, "开")}
           ${keepAwakeButton(false, "关")}
+        </div>
+      </div>
+      <div class="setting-row">
+        <span>锁屏续播</span>
+        <div class="segmented">
+          ${lockScreenAudioButton(true, "开")}
+          ${lockScreenAudioButton(false, "关")}
         </div>
       </div>
       <div class="setting-row">
@@ -931,6 +950,10 @@ function autoNextButton(value, label) {
 
 function keepAwakeButton(value, label) {
   return `<button type="button" class="${state.reader.keepAwake === value ? "active" : ""}" data-keep-awake="${value}">${label}</button>`;
+}
+
+function lockScreenAudioButton(value, label) {
+  return `<button type="button" class="${state.reader.lockScreenAudio === value ? "active" : ""}" data-lock-screen-audio="${value}">${label}</button>`;
 }
 
 function sleepButton(minutes, label) {
@@ -1079,6 +1102,19 @@ function bindEvents() {
         releaseWakeLock();
       }
       render();
+    });
+  });
+
+  $app.querySelectorAll("[data-lock-screen-audio]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.reader.lockScreenAudio = button.dataset.lockScreenAudio === "true";
+      persistReader();
+      if (state.reader.lockScreenAudio && state.audio.active && !state.audio.paused) {
+        ensureLockScreenAudio().then(() => render());
+      } else {
+        stopLockScreenAudio();
+        render();
+      }
     });
   });
 
@@ -1313,6 +1349,97 @@ function wakeLockStatusLabel() {
   return wakeLockSentinel ? "防黑屏开" : "防黑屏待命";
 }
 
+function lockScreenAudioStatusLabel() {
+  if (!state.reader.lockScreenAudio) return "锁屏续播关";
+  return lockScreenAudioElement && !lockScreenAudioElement.paused ? "锁屏续播开" : "锁屏续播待命";
+}
+
+function lockScreenAudioSupported() {
+  return "Audio" in window && "Blob" in window && "URL" in window;
+}
+
+async function ensureLockScreenAudio() {
+  if (!state.reader.lockScreenAudio || !state.audio.active || state.audio.paused) {
+    stopLockScreenAudio();
+    return false;
+  }
+
+  if (!lockScreenAudioSupported()) {
+    return false;
+  }
+
+  const audio = lockScreenAudioElement || createLockScreenAudioElement();
+  try {
+    if (audio.paused) {
+      await audio.play();
+    }
+    return true;
+  } catch (error) {
+    if (!lockScreenAudioWarningShown) {
+      lockScreenAudioWarningShown = true;
+      showToast("锁屏续播未能启动，请先点一次播放");
+    }
+    return false;
+  }
+}
+
+function createLockScreenAudioElement() {
+  const audio = new Audio();
+  audio.src = lockScreenAudioUrl || createSilentAudioUrl();
+  audio.loop = true;
+  audio.preload = "auto";
+  audio.volume = 1;
+  audio.setAttribute("aria-hidden", "true");
+  lockScreenAudioElement = audio;
+  return audio;
+}
+
+function createSilentAudioUrl() {
+  const sampleRate = 8000;
+  const durationSeconds = 1;
+  const sampleCount = sampleRate * durationSeconds;
+  const bytesPerSample = 2;
+  const dataSize = sampleCount * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, "WAVE");
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint16(32, bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+  lockScreenAudioUrl = URL.createObjectURL(new Blob([buffer], { type: "audio/wav" }));
+  return lockScreenAudioUrl;
+}
+
+function writeAscii(view, offset, text) {
+  for (let index = 0; index < text.length; index += 1) {
+    view.setUint8(offset + index, text.charCodeAt(index));
+  }
+}
+
+function pauseLockScreenAudio() {
+  if (!lockScreenAudioElement) return;
+  lockScreenAudioElement.pause();
+}
+
+function stopLockScreenAudio() {
+  if (!lockScreenAudioElement) return;
+  lockScreenAudioElement.pause();
+  try {
+    lockScreenAudioElement.currentTime = 0;
+  } catch (error) {
+    // Some mobile browsers reject currentTime changes while the audio element is settling.
+  }
+}
+
 function setupMediaSessionHandlers() {
   if (!("mediaSession" in navigator)) return;
 
@@ -1389,6 +1516,7 @@ function startAudio(chapterId, options = {}) {
   };
 
   ensureSleepTimer();
+  ensureLockScreenAudio();
   requestWakeLock().then((locked) => {
     if (locked && state.audio.active && !state.audio.paused) {
       render();
@@ -1404,6 +1532,7 @@ function pauseAudio() {
   window.speechSynthesis.pause();
   state.audio.paused = true;
   releaseWakeLock();
+  pauseLockScreenAudio();
   updateMediaSession();
   render();
 }
@@ -1413,6 +1542,7 @@ function resumeAudio() {
   window.speechSynthesis.resume();
   state.audio.paused = false;
   ensureSleepTimer();
+  ensureLockScreenAudio();
   requestWakeLock().then((locked) => {
     if (locked && state.audio.active && !state.audio.paused) {
       render();
@@ -1454,6 +1584,7 @@ function stopAudio(shouldRender = true, options = {}) {
     clearSleepTimer();
   }
   releaseWakeLock();
+  stopLockScreenAudio();
   speechQueue = [];
   speechIndex = 0;
   activeUtterance = null;
@@ -1501,6 +1632,7 @@ function finishAudio() {
   }
 
   releaseWakeLock();
+  stopLockScreenAudio();
   updateMediaSession();
   clearSleepTimer(false);
   render();
